@@ -2,39 +2,30 @@
 AI Orchestration Service
 
 LangGraph-based agent orchestrator for query processing and tool routing.
+
+This module implements the core LangGraph StateGraph workflow for Ordo's AI orchestration.
+It processes user queries through a multi-stage pipeline:
+1. parse_query: Analyze user query and extract intent
+2. check_permissions: Verify required permissions are available
+3. select_tools: Determine which tools to execute
+4. execute_tools: Run tools with error handling
+5. filter_results: Apply policy engine to scan for sensitive data
+6. aggregate_results: Combine multi-surface data with source attribution
+7. generate_response: Create natural language response with citations
+
+Validates: Requirements 7.1, 7.2, 7.3
 """
 
 from typing import Dict, Any, List, Optional, TypedDict
-from langchain_mistralai import ChatMistralAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from langgraph.graph import StateGraph, END
 from ordo_backend.config import settings
 from ordo_backend.services.policy_engine import PolicyEngine
+from ordo_backend.services.llm_provider import get_llm_provider, LLMProvider
+from ordo_backend.services.system_prompt import ORDO_SYSTEM_PROMPT, get_system_prompt
 from ordo_backend.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-# Privacy-aware system prompt
-ORDO_SYSTEM_PROMPT = """You are Ordo, a privacy-first AI assistant for Solana Seeker users.
-
-CRITICAL RULES:
-1. NEVER extract or repeat OTP codes, verification codes, recovery phrases, or passwords from emails/messages
-2. NEVER auto-send emails, DMs, or transactions without explicit user confirmation
-3. ALWAYS cite sources when answering from email/social/wallet data
-4. Treat all user data (email content, DMs, wallet activity) as confidential
-5. If a query requires blocked data (OTP, bank statements), politely refuse and explain
-
-CAPABILITIES:
-- Read Gmail (excluding verification/OTP emails)
-- Read X/Telegram DMs and mentions
-- View Solana wallet portfolio and transaction history
-- Build Solana transaction payloads (user must sign via Seed Vault)
-- Search web and Solana ecosystem docs
-
-TONE: Helpful, transparent, and security-conscious
-
-When citing sources, use format: [source_type:id] where source_type is gmail, x, telegram, wallet, or web."""
 
 
 class AgentState(TypedDict):
@@ -75,7 +66,7 @@ class OrdoAgent:
         Args:
             policy_engine: PolicyEngine instance for content filtering
         """
-        self.llm: Optional[ChatMistralAI] = None
+        self.llm_provider: Optional[LLMProvider] = None
         self.policy_engine = policy_engine or PolicyEngine()
         self.graph: Optional[StateGraph] = None
         self.compiled_graph = None
@@ -83,18 +74,14 @@ class OrdoAgent:
         logger.info("OrdoAgent initialized")
     
     async def initialize(self):
-        """Initialize LLM and build LangGraph workflow."""
-        # Initialize ChatMistralAI
-        if settings.MISTRAL_API_KEY:
-            self.llm = ChatMistralAI(
-                model="mistral-large-latest",
-                temperature=0.7,
-                max_tokens=2000,
-                api_key=settings.MISTRAL_API_KEY
-            )
-            logger.info("ChatMistralAI initialized with mistral-large-latest")
-        else:
-            logger.warning("MISTRAL_API_KEY not set, LLM will not be available")
+        """Initialize LLM provider and build LangGraph workflow."""
+        # Initialize LLM provider with Mistral AI and OpenRouter fallback
+        self.llm_provider = get_llm_provider(
+            temperature=0.7,
+            max_tokens=2000,
+            enable_tracing=settings.LANGSMITH_TRACING
+        )
+        logger.info("LLM provider initialized with Mistral AI and OpenRouter fallback")
         
         # Build LangGraph workflow
         self.graph = self._build_graph()
@@ -151,14 +138,23 @@ class OrdoAgent:
         """
         logger.info(f"Parsing query: {state['query'][:100]}...")
         
-        if not self.llm:
+        if not self.llm_provider:
             state["intent"] = "unknown"
-            state["errors"].append("LLM not initialized")
+            state["errors"].append("LLM provider not initialized")
             return state
         
         try:
+            # Get available surfaces from permissions
+            available_surfaces = [
+                surface for surface, granted in state["permissions"].items() 
+                if granted
+            ]
+            
+            # Use system prompt with available surfaces context
+            system_prompt = get_system_prompt(available_surfaces=available_surfaces)
+            
             messages = [
-                SystemMessage(content=ORDO_SYSTEM_PROMPT),
+                SystemMessage(content=system_prompt),
                 HumanMessage(content=f"""Analyze this query and determine the user's intent.
                 
 Query: {state['query']}
@@ -171,7 +167,7 @@ Identify:
 Respond with a brief intent summary.""")
             ]
             
-            response = await self.llm.ainvoke(messages)
+            response = await self.llm_provider.ainvoke(messages)
             state["intent"] = response.content
             state["messages"].append(response)
             
@@ -198,17 +194,33 @@ Respond with a brief intent summary.""")
         # Extract required surfaces from intent
         # This is a simple heuristic - in production, use LLM function calling
         intent_lower = (state.get("intent") or "").lower()
+        query_lower = state.get("query", "").lower()
         required_surfaces = []
         
-        if "gmail" in intent_lower or "email" in intent_lower:
+        # Check for Gmail/Email
+        if ("gmail" in intent_lower or "email" in intent_lower or 
+            "gmail" in query_lower or "email" in query_lower):
             required_surfaces.append("READ_GMAIL")
-        if "x" in intent_lower or "twitter" in intent_lower:
+        
+        # Check for X/Twitter
+        if ("x" in intent_lower or "twitter" in intent_lower or "tweet" in intent_lower or
+            "x" in query_lower or "twitter" in query_lower or "tweet" in query_lower):
             required_surfaces.append("READ_SOCIAL_X")
-        if "telegram" in intent_lower:
+        
+        # Check for Telegram
+        if "telegram" in intent_lower or "telegram" in query_lower:
             required_surfaces.append("READ_SOCIAL_TELEGRAM")
-        if "wallet" in intent_lower or "portfolio" in intent_lower or "balance" in intent_lower:
+        
+        # Check for Wallet
+        if ("wallet" in intent_lower or "portfolio" in intent_lower or "balance" in intent_lower or
+            "wallet" in query_lower or "portfolio" in query_lower or "balance" in query_lower or
+            "token" in query_lower or "nft" in query_lower):
             required_surfaces.append("READ_WALLET")
-        if "send" in intent_lower or "transfer" in intent_lower or "sign" in intent_lower:
+        
+        # Check for Transaction signing
+        if ("send" in intent_lower or "transfer" in intent_lower or "sign" in intent_lower or
+            "swap" in intent_lower or "stake" in intent_lower or
+            "send" in query_lower or "transfer" in query_lower):
             required_surfaces.append("SIGN_TRANSACTIONS")
         
         state["required_permissions"] = required_surfaces
@@ -395,16 +407,25 @@ Respond with a brief intent summary.""")
             # Generate error response
             state["response"] = self._generate_error_response(state["errors"])
             logger.info("Generated error response")
-        elif not self.llm:
+        elif not self.llm_provider:
             state["response"] = "I'm unable to process your query at this time. The AI service is not available."
-            logger.warning("Cannot generate response: LLM not initialized")
+            logger.warning("Cannot generate response: LLM provider not initialized")
         else:
             try:
+                # Get available surfaces from permissions
+                available_surfaces = [
+                    surface for surface, granted in state["permissions"].items() 
+                    if granted
+                ]
+                
+                # Use system prompt with available surfaces context
+                system_prompt = get_system_prompt(available_surfaces=available_surfaces)
+                
                 # Generate success response with citations
                 context = self._format_context(state["filtered_results"])
                 
                 messages = [
-                    SystemMessage(content=ORDO_SYSTEM_PROMPT),
+                    SystemMessage(content=system_prompt),
                     HumanMessage(content=f"""Context from tools:
 {context}
 
@@ -413,7 +434,7 @@ Original query: {state['query']}
 Generate a helpful response using the context above. Include inline citations using the format [source_type:tool_name].""")
                 ]
                 
-                response = await self.llm.ainvoke(messages)
+                response = await self.llm_provider.ainvoke(messages)
                 state["response"] = response.content
                 logger.info("Generated success response")
             except Exception as e:

@@ -22,11 +22,11 @@ class Settings(BaseSettings):
     API_PORT: int = Field(default=8000, description="API port")
     
     # Security
-    API_SECRET_KEY: str = Field(..., description="Secret key for JWT signing")
-    API_KEY_FRONTEND: str = Field(..., description="API key for frontend authentication")
+    API_SECRET_KEY: str = Field(default="dev-secret-key-change-in-production", description="Secret key for JWT signing")
+    API_KEY_FRONTEND: str = Field(default="dev-frontend-key", description="API key for frontend authentication")
     
     # Database
-    DATABASE_URL: str = Field(..., description="PostgreSQL connection URL")
+    DATABASE_URL: str = Field(default="postgresql+asyncpg://ordo:ordo_password@localhost:5432/ordo_db", description="PostgreSQL connection URL")
     DATABASE_POOL_SIZE: int = Field(default=20, description="Database connection pool size")
     DATABASE_MAX_OVERFLOW: int = Field(default=10, description="Max overflow connections")
     
@@ -35,16 +35,27 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: str = Field(default="", description="Redis password")
     
     # Mistral AI
-    MISTRAL_API_KEY: str = Field(..., description="Mistral AI API key")
+    MISTRAL_API_KEY: str = Field(default="", description="Mistral AI API key")
     MISTRAL_MODEL: str = Field(default="mistral-large-latest", description="Mistral LLM model")
     MISTRAL_EMBED_MODEL: str = Field(default="mistral-embed", description="Mistral embedding model")
     
+    # OpenRouter (Fallback)
+    OPENROUTER_API_KEY: str = Field(default="", description="OpenRouter API key for fallback")
+    OPENROUTER_MODEL: str = Field(default="deepseek/deepseek-r1-0528:free", description="OpenRouter model")
+    OPENROUTER_SITE_URL: str = Field(default="https://ordo.app", description="Site URL for OpenRouter")
+    OPENROUTER_APP_NAME: str = Field(default="Ordo", description="App name for OpenRouter")
+    
+    # LangSmith (Tracing)
+    LANGSMITH_API_KEY: str = Field(default="", description="LangSmith API key for tracing")
+    LANGSMITH_TRACING: bool = Field(default=False, description="Enable LangSmith tracing")
+    LANGSMITH_PROJECT: str = Field(default="ordo", description="LangSmith project name")
+    
     # Supabase (for RAG)
-    SUPABASE_URL: str = Field(..., description="Supabase project URL")
-    SUPABASE_KEY: str = Field(..., description="Supabase anon key")
+    SUPABASE_URL: str = Field(default="", description="Supabase project URL")
+    SUPABASE_KEY: str = Field(default="", description="Supabase anon key")
     
     # Helius RPC
-    HELIUS_API_KEY: str = Field(..., description="Helius API key")
+    HELIUS_API_KEY: str = Field(default="", description="Helius API key")
     HELIUS_RPC_URL: str = Field(
         default="https://mainnet.helius-rpc.com",
         description="Helius RPC endpoint"
@@ -58,11 +69,18 @@ class Settings(BaseSettings):
     RATE_LIMIT_BURST: int = Field(default=10, description="Rate limit burst")
     
     # CORS
-    CORS_ORIGINS: List[str] = Field(
-        default=["http://localhost:8081"],
-        description="Allowed CORS origins"
+    CORS_ORIGINS: str = Field(
+        default="http://localhost:8081",
+        description="Allowed CORS origins (comma-separated)"
     )
     CORS_ALLOW_CREDENTIALS: bool = Field(default=True, description="Allow credentials")
+    
+    @property
+    def cors_origins_list(self) -> List[str]:
+        """Get CORS origins as a list."""
+        if isinstance(self.CORS_ORIGINS, str):
+            return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        return self.CORS_ORIGINS
     
     # Logging
     LOG_LEVEL: str = Field(default="INFO", description="Logging level")
@@ -79,11 +97,11 @@ class Settings(BaseSettings):
     # Audit Log
     AUDIT_LOG_RETENTION_DAYS: int = Field(default=90, description="Audit log retention in days")
     
-    @validator("CORS_ORIGINS", pre=True)
+    @validator("CORS_ORIGINS", pre=True, always=True)
     def parse_cors_origins(cls, v):
-        """Parse CORS origins from comma-separated string or list."""
-        if isinstance(v, str):
-            return [origin.strip() for origin in v.split(",")]
+        """Parse CORS origins from comma-separated string."""
+        if v is None or v == "":
+            return "http://localhost:8081"
         return v
     
     @validator("LOG_LEVEL")

@@ -97,7 +97,7 @@ class TestOrdoAgent:
     
     def test_agent_initialization(self, agent):
         """Test that agent initializes with correct defaults."""
-        assert agent.llm is None  # Not initialized until initialize() is called
+        assert agent.llm_provider is None  # Not initialized until initialize() is called
         assert agent.policy_engine is not None
         assert agent.graph is None
         assert agent.compiled_graph is None
@@ -105,13 +105,15 @@ class TestOrdoAgent:
     @pytest.mark.asyncio
     async def test_agent_initialize_without_api_key(self, agent, monkeypatch):
         """Test agent initialization without Mistral API key."""
-        # Remove API key
-        monkeypatch.setattr("ordo_backend.services.orchestrator.settings.MISTRAL_API_KEY", None)
+        # Remove API keys
+        monkeypatch.setattr("ordo_backend.services.orchestrator.settings.MISTRAL_API_KEY", "")
+        monkeypatch.setattr("ordo_backend.services.orchestrator.settings.OPENROUTER_API_KEY", "")
+        monkeypatch.setattr("ordo_backend.services.orchestrator.settings.LANGSMITH_TRACING", False)
         
         await agent.initialize()
         
-        # LLM should not be initialized
-        assert agent.llm is None
+        # LLM provider should be initialized but without LLMs
+        assert agent.llm_provider is not None
         # Graph should still be built
         assert agent.graph is not None
         assert agent.compiled_graph is not None
@@ -134,7 +136,7 @@ class TestWorkflowNodes:
         
         assert result["intent"] == "unknown"
         assert len(result["errors"]) > 0
-        assert "LLM not initialized" in result["errors"][0]
+        assert "LLM provider not initialized" in result["errors"][0]
     
     @pytest.mark.asyncio
     async def test_check_permissions_node_with_wallet_query(self, agent, initial_state):
