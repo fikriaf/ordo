@@ -1,0 +1,1285 @@
+# Ordo Backend API - Admin LLM Context (Complete)
+
+## System Overview
+Ordo adalah REST API backend untuk AI assistant yang dapat melakukan 60+ operasi blockchain Solana melalui natural language. Backend ini menyediakan authentication, wallet management, AI chat dengan function calling, transaction tracking, dan comprehensive admin panel.
+
+**Base URL**: `http://localhost:3000/api/v1` (development)
+**Production URL**: `https://api.ordo-assistant.com/api/v1`
+
+## Architecture
+
+### Tech Stack
+- **Runtime**: Node.js 18+ dengan TypeScript
+- **Framework**: Express.js
+- **Database**: Supabase (PostgreSQL)
+- **LLM**: OpenRouter SDK (multi-model support)
+- **Blockchain**: Solana Agent Kit
+- **Caching**: In-memory (Redis optional)
+- **Logging**: Winston (structured JSON logs)
+
+### Security Layers
+1. **Authentication**: JWT dengan bcrypt password hashing
+2. **Encryption**: AES-256-GCM untuk private keys
+3. **Rate Limiting**: 3-tier (global, auth, admin)
+4. **Input Sanitization**: SQL injection & XSS protection
+5. **Error Handling**: Centralized dengan sensitive data redaction
+6. **Retry Logic**: Exponential backoff untuk external services
+
+### Database Schema
+- `users` - User accounts dengan role-based access
+- `wallets` - Encrypted Solana wallets
+- `transactions` - Transaction history dan tracking
+- `conversations` - AI chat conversations
+- `messages` - Chat messages dengan context
+- `ai_models` - AI model configurations
+- `plugins` - Dynamic plugin registry
+- `admin_configs` - System configuration
+- `audit_logs` - Admin action logging
+
+## Core Features
+- JWT-based authentication dengan role-based access control (user/admin)
+- Secure wallet management dengan AES-256-GCM encryption
+- AI chat dengan OpenRouter integration, function calling, dan streaming
+- Dynamic plugin system untuk extensibility
+- Transaction recording, tracking, dan comprehensive history
+- Admin dashboard dengan metrics dan monitoring
+- Audit logging untuk semua admin actions
+- Health checks untuk all dependencies
+
+## Rate Limiting
+- **Global**: 100 requests/minute per IP
+- **Auth endpoints**: 10 requests/minute per IP
+- **Admin endpoints**: 50 requests/minute per IP
+- Semua requests di-log untuk security monitoring
+- Rate limit headers included in responses
+
+---
+
+## PUBLIC ENDPOINTS
+
+### Authentication
+
+#### Register User
+**POST** `/auth/register`
+
+**Request**:
+```json
+{
+  "email": "user@example.com",
+  "password": "Password123!",
+  "name": "John Doe"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "uuid",
+      "email": "user@example.com",
+      "name": "John Doe",
+      "role": "user"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
+
+**Validation Rules**:
+- Email: Valid email format, unique
+- Password: Min 8 chars, must contain uppercase, lowercase, number, symbol
+- Name: Min 2 chars, max 100 chars
+
+#### Login
+**POST** `/auth/login`
+
+**Request**:
+```json
+{
+  "email": "user@example.com",
+  "password": "Password123!"
+}
+```
+
+**Response**: Same as register
+
+**Notes**:
+- Token expires in 24 hours
+- Failed attempts logged for security
+- Rate limited to prevent brute force
+
+#### Refresh Token
+**POST** `/auth/refresh`
+
+**Headers**: `Authorization: Bearer <old_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "token": "new_jwt_token"
+  }
+}
+```
+
+### Wallet Management
+
+#### Create Wallet
+**POST** `/wallet/create`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "wallet_uuid",
+    "public_key": "CuSWTUgxq8PJpDhnkXHF123TDrSTSUyFKVGHv4rj9176",
+    "is_primary": true,
+    "created_at": "2026-02-01T00:00:00Z"
+  }
+}
+```
+
+**Implementation Details**:
+- Generates Solana keypair using @solana/web3.js
+- Private key encrypted with AES-256-GCM
+- Encryption metadata (IV, auth tag) stored separately
+- First wallet automatically set as primary
+- Transaction logged for audit
+
+#### Import Wallet
+**POST** `/wallet/import`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "privateKey": "base58_encoded_private_key"
+}
+```
+
+**Response**: Same as create wallet
+
+**Validation**:
+- Private key must be valid base58
+- Must be valid Solana keypair
+- Duplicate public keys rejected
+- Encrypted before storage
+
+#### Get Wallet Balance
+**GET** `/wallet/:id/balance`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "sol": 1.5,
+    "tokens": [
+      {
+        "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "amount": 100.5,
+        "decimals": 6
+      }
+    ]
+  }
+}
+```
+
+**Implementation**:
+- Queries Helius RPC for real-time data
+- Automatic retry with exponential backoff (3 attempts)
+- 10-second timeout per request
+- Caches balance for 30 seconds (optional)
+
+#### List User Wallets
+**GET** `/wallets`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "wallet_uuid",
+      "public_key": "...",
+      "is_primary": true,
+      "created_at": "2026-02-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+**Ordering**: Primary wallet first, then by created_at DESC
+
+### AI Chat
+
+#### Send Message (Non-Streaming)
+**POST** `/chat`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "message": "What is the price of SOL?",
+  "conversationId": "optional_conversation_uuid"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "response": "The current price of SOL is $150.25",
+    "conversationId": "conversation_uuid",
+    "toolCalls": [
+      {
+        "name": "get_sol_price",
+        "result": { "price": 150.25 }
+      }
+    ]
+  }
+}
+```
+
+**AI Models** (with fallback):
+1. Primary: `deepseek/deepseek-chat` ($0.25/$0.38 per 1M tokens)
+2. Fallback 1: `google/gemini-3-flash-preview` ($0.50/$3 per 1M tokens)
+3. Fallback 2: `anthropic/claude-sonnet-4` ($3/$15 per 1M tokens)
+4. Fallback 3: `xiaomi/mimo-v2-flash:free` (FREE)
+5. Fallback 4: `mistralai/devstral-2-2512:free` (FREE)
+
+**Function Calling Flow**:
+1. User message sent to LLM with available tools
+2. LLM decides which tools to call
+3. Tools executed via PluginManager
+4. Results sent back to LLM
+5. LLM generates final response
+
+#### Send Message (Streaming)
+**POST** `/chat/stream`
+
+**Headers**: 
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Request**: Same as non-streaming
+
+**Response**: Server-Sent Events (SSE)
+```
+data: {"token": "The"}
+data: {"token": " current"}
+data: {"token": " price"}
+...
+data: [DONE]
+```
+
+**Implementation**:
+- Uses OpenRouter streaming API
+- Chunks sent as they arrive
+- Connection cleanup on disconnect
+- Timeout: 60 seconds
+
+#### Get Conversations
+**GET** `/conversations`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "conversation_uuid",
+      "user_id": "user_uuid",
+      "status": "active",
+      "created_at": "2026-02-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+**Conversation Status**:
+- `active` - Currently active
+- `archived` - Inactive for 24+ hours
+
+#### Get Conversation Messages
+**GET** `/conversations/:id/messages`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "message_uuid",
+      "conversation_id": "conversation_uuid",
+      "role": "user",
+      "content": "What is the price of SOL?",
+      "metadata": {},
+      "created_at": "2026-02-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+**Context Window**: Last 10 messages used for AI context
+
+### Blockchain Actions
+
+#### List Available Actions
+**GET** `/actions`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "name": "get_balance",
+      "description": "Get wallet balance",
+      "plugin": "solana-token",
+      "parameters": []
+    },
+    {
+      "name": "get_sol_price",
+      "description": "Get current SOL price",
+      "plugin": "price-feed",
+      "parameters": []
+    }
+  ]
+}
+```
+
+**Available Plugins**:
+- `solana-token` - Token operations
+- `price-feed` - Price data from Pyth
+
+#### Execute Action
+**POST** `/actions/:actionName`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "params": {}
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "result": { ... }
+  }
+}
+```
+
+### Transaction History
+
+#### Get Transaction History
+**GET** `/transactions`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Query Parameters**:
+- `page` (optional): Page number, default 1
+- `limit` (optional): Items per page, default 10, max 100
+- `type` (optional): Filter by type
+- `status` (optional): Filter by status
+- `startDate` (optional): ISO 8601 date
+- `endDate` (optional): ISO 8601 date
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "transactions": [...],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 50,
+      "totalPages": 5
+    }
+  }
+}
+```
+
+#### Get Transaction Details
+**GET** `/transactions/:id`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "tx_uuid",
+    "signature": "solana_signature",
+    "type": "transfer",
+    "status": "confirmed",
+    "amount": 1.5,
+    "metadata": {},
+    "created_at": "2026-02-01T00:00:00Z",
+    "updated_at": "2026-02-01T00:00:00Z"
+  }
+}
+```
+
+### Health Check
+
+#### Basic Health Check
+**GET** `/health`
+
+**Response**:
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-02-01T00:00:00Z"
+}
+```
+
+#### Detailed Health Check
+**GET** `/health/detailed`
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-02-01T00:00:00Z",
+  "uptime": 170,
+  "version": "1.0.0",
+  "dependencies": {
+    "database": {
+      "status": "healthy",
+      "responseTime": 552,
+      "lastChecked": "2026-02-01T00:00:00Z"
+    },
+    "solanaRpc": {
+      "status": "healthy",
+      "responseTime": 611,
+      "lastChecked": "2026-02-01T00:00:00Z"
+    },
+    "openRouter": {
+      "status": "healthy",
+      "responseTime": 137,
+      "lastChecked": "2026-02-01T00:00:00Z"
+    }
+  }
+}
+```
+
+**Health Status**:
+- `healthy` - All dependencies OK
+- `degraded` - Some dependencies slow
+- `unhealthy` - Critical dependencies down
+
+---
+
+## ADMIN ENDPOINTS
+
+**Note**: Semua admin endpoints memerlukan role `admin` dan JWT token.
+
+### Dashboard
+
+#### Get Dashboard Metrics
+**GET** `/admin/dashboard`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "activeUsers": 14,
+    "totalUsers": 14,
+    "totalTransactions": 0,
+    "successRate": 95.5,
+    "averageResponseTime": 250,
+    "errorRate": 0.5,
+    "pendingTransactions": 0
+  }
+}
+```
+
+**Metrics Calculation**:
+- `activeUsers`: Users active in last 24 hours
+- `totalUsers`: All registered users
+- `totalTransactions`: All transactions
+- `successRate`: (confirmed / total) * 100
+- `averageResponseTime`: Average API response time (ms)
+- `errorRate`: (failed / total) * 100
+- `pendingTransactions`: Transactions with status 'pending'
+
+### User Management
+
+#### List Users
+**GET** `/admin/users`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Query Parameters**:
+- `page` (optional): Page number, default 1
+- `limit` (optional): Items per page, default 20, max 100
+- `role` (optional): Filter by role (user/admin)
+- `search` (optional): Search by email or name
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "users": [
+      {
+        "id": "user_uuid",
+        "email": "user@example.com",
+        "name": "John Doe",
+        "role": "user",
+        "created_at": "2026-02-01T00:00:00Z",
+        "last_login": "2026-02-01T00:00:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 20,
+      "total": 100,
+      "totalPages": 5
+    }
+  }
+}
+```
+
+#### Get User Details
+**GET** `/admin/users/:id`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "user_uuid",
+      "email": "user@example.com",
+      "name": "John Doe",
+      "role": "user",
+      "created_at": "2026-02-01T00:00:00Z",
+      "last_login": "2026-02-01T00:00:00Z"
+    },
+    "stats": {
+      "totalWallets": 3,
+      "totalTransactions": 25,
+      "totalConversations": 10
+    }
+  }
+}
+```
+
+#### Delete User
+**DELETE** `/admin/users/:id`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "User deleted successfully"
+}
+```
+
+**Cascade Deletion**:
+- Deletes all user wallets
+- Deletes all user transactions
+- Deletes all user conversations
+- Deletes all user messages
+- Logged in audit_logs
+
+### Transaction Monitoring
+
+#### List All Transactions
+**GET** `/admin/transactions`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Query Parameters**:
+- `page`, `limit` - Pagination
+- `userId` - Filter by user
+- `type` - Filter by type
+- `status` - Filter by status
+- `startDate`, `endDate` - Date range
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "transactions": [...],
+    "pagination": {...}
+  }
+}
+```
+
+#### Get Transaction Statistics
+**GET** `/admin/transactions/stats`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Query Parameters**:
+- `startDate` (optional): Start date for stats
+- `endDate` (optional): End date for stats
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "total": 1000,
+    "confirmed": 950,
+    "pending": 30,
+    "failed": 20,
+    "successRate": 95.0,
+    "byType": {
+      "transfer": 500,
+      "swap": 300,
+      "stake": 200
+    },
+    "totalVolume": 150000.50
+  }
+}
+```
+
+### AI Model Management
+
+#### List AI Models
+**GET** `/admin/models`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "model_uuid",
+      "name": "DeepSeek V3.2",
+      "provider": "DeepSeek",
+      "model_id": "deepseek/deepseek-chat",
+      "is_default": true,
+      "is_enabled": true,
+      "config": {
+        "context_length": 163000
+      },
+      "usage_stats": {
+        "total_requests": 1000,
+        "total_tokens": 500000
+      },
+      "created_at": "2026-02-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+#### Create AI Model
+**POST** `/admin/models`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Request**:
+```json
+{
+  "name": "GPT-4 Turbo",
+  "provider": "OpenAI",
+  "modelId": "openai/gpt-4-turbo",
+  "config": {
+    "maxTokens": 4000,
+    "temperature": 0.7
+  }
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "model_uuid",
+    "name": "GPT-4 Turbo",
+    ...
+  }
+}
+```
+
+**Audit Log**: Created automatically
+
+#### Update AI Model
+**PUT** `/admin/models/:id`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Request**:
+```json
+{
+  "name": "GPT-4 Turbo Updated",
+  "config": {
+    "maxTokens": 8000
+  }
+}
+```
+
+**Response**: Updated model object
+
+**Audit Log**: Created automatically
+
+#### Delete AI Model
+**DELETE** `/admin/models/:id`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Model deleted successfully"
+}
+```
+
+**Validation**: Cannot delete default model
+
+**Audit Log**: Created automatically
+
+#### Set Default Model
+**PUT** `/admin/models/:id/default`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Default model updated"
+}
+```
+
+**Effect**: 
+- Previous default model set to non-default
+- New model set as default
+- Takes effect immediately (hot reload)
+
+#### Enable Model
+**PUT** `/admin/models/:id/enable`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Model enabled"
+}
+```
+
+#### Disable Model
+**PUT** `/admin/models/:id/disable`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Model disabled"
+}
+```
+
+**Validation**: Cannot disable default model
+
+### Plugin Management
+
+#### List Plugins
+**GET** `/admin/plugins`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "plugin_uuid",
+      "name": "solana-token",
+      "version": "1.0.0",
+      "description": "Solana token operations",
+      "is_enabled": true,
+      "config": {},
+      "actions": [
+        {
+          "name": "get_balance",
+          "description": "Get wallet balance"
+        }
+      ],
+      "created_at": "2026-02-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+#### Create Plugin
+**POST** `/admin/plugins`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Request**:
+```json
+{
+  "name": "custom-plugin",
+  "version": "1.0.0",
+  "description": "Custom plugin description",
+  "config": {}
+}
+```
+
+**Response**: Created plugin object
+
+**Validation**:
+- Name must be unique
+- Version must follow semver
+- Compatibility check performed
+
+#### Update Plugin
+**PUT** `/admin/plugins/:id`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Request**:
+```json
+{
+  "version": "1.1.0",
+  "config": {
+    "newSetting": "value"
+  }
+}
+```
+
+**Response**: Updated plugin object
+
+#### Delete Plugin
+**DELETE** `/admin/plugins/:id`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Plugin deleted successfully"
+}
+```
+
+**Cleanup**:
+- Removes plugin from registry
+- Disables all plugin actions
+- Logged in audit_logs
+
+#### Enable Plugin
+**PUT** `/admin/plugins/:id/enable`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Plugin enabled"
+}
+```
+
+**Effect**: Plugin actions become available immediately
+
+#### Disable Plugin
+**PUT** `/admin/plugins/:id/disable`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Plugin disabled"
+}
+```
+
+**Effect**: Plugin actions become unavailable immediately
+
+### Configuration Management
+
+#### Get Configuration
+**GET** `/admin/config`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Query Parameters**:
+- `key` (optional): Get specific config key
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "config_uuid",
+      "key": "rate_limit_global",
+      "value": "100",
+      "description": "Global rate limit per minute",
+      "updated_at": "2026-02-01T00:00:00Z",
+      "updated_by": "admin_uuid"
+    }
+  ]
+}
+```
+
+#### Update Configuration
+**PUT** `/admin/config`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Request**:
+```json
+{
+  "key": "rate_limit_global",
+  "value": "150"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Configuration updated",
+  "data": {
+    "key": "rate_limit_global",
+    "value": "150",
+    "previous_value": "100"
+  }
+}
+```
+
+**Hot Reload**: Changes apply immediately without restart
+
+**Validation**: Value validated against schema
+
+**History**: Previous value stored in audit_logs
+
+#### Get Configuration History
+**GET** `/admin/config/history`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Query Parameters**:
+- `key` (optional): Filter by config key
+- `limit` (optional): Number of history entries
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "key": "rate_limit_global",
+      "old_value": "100",
+      "new_value": "150",
+      "changed_by": "admin_uuid",
+      "changed_at": "2026-02-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+#### Rollback Configuration
+**POST** `/admin/config/rollback/:version`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "message": "Configuration rolled back",
+  "data": {
+    "key": "rate_limit_global",
+    "value": "100",
+    "rolled_back_from": "150"
+  }
+}
+```
+
+**Effect**: Reverts to previous version immediately
+
+### Audit Logs
+
+#### Get Audit Logs
+**GET** `/admin/audit-logs`
+
+**Headers**: `Authorization: Bearer <admin_token>`
+
+**Query Parameters**:
+- `page`, `limit` - Pagination
+- `adminId` - Filter by admin
+- `action` - Filter by action type
+- `resourceType` - Filter by resource
+- `startDate`, `endDate` - Date range
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "logs": [
+      {
+        "id": "log_uuid",
+        "admin_id": "admin_uuid",
+        "admin_email": "admin@ordo.com",
+        "action": "delete_user",
+        "resource_type": "user",
+        "resource_id": "user_uuid",
+        "metadata": {
+          "user_email": "deleted@example.com"
+        },
+        "created_at": "2026-02-01T00:00:00Z"
+      }
+    ],
+    "pagination": {...}
+  }
+}
+```
+
+**Action Types**:
+- `create_model`, `update_model`, `delete_model`
+- `create_plugin`, `update_plugin`, `delete_plugin`
+- `update_config`, `rollback_config`
+- `delete_user`
+- `enable_model`, `disable_model`
+- `enable_plugin`, `disable_plugin`
+
+---
+
+## Error Handling
+
+### Error Response Format
+```json
+{
+  "success": false,
+  "error": "Error message",
+  "code": "ERROR_CODE"
+}
+```
+
+### HTTP Status Codes
+- `200` - Success
+- `201` - Created
+- `400` - Bad Request (validation error)
+- `401` - Unauthorized (invalid/expired token)
+- `403` - Forbidden (insufficient permissions)
+- `404` - Not Found
+- `409` - Conflict (duplicate resource)
+- `429` - Too Many Requests (rate limit)
+- `500` - Internal Server Error
+- `503` - Service Unavailable (dependency down)
+
+### Common Errors
+
+**Admin Access Required**:
+```json
+{
+  "success": false,
+  "error": "Admin access required"
+}
+```
+
+**Resource Not Found**:
+```json
+{
+  "success": false,
+  "error": "Resource not found"
+}
+```
+
+**Validation Error**:
+```json
+{
+  "success": false,
+  "error": "Validation failed",
+  "errors": [
+    {
+      "field": "email",
+      "message": "Invalid email format"
+    }
+  ]
+}
+```
+
+---
+
+## Security Implementation
+
+### Authentication Flow
+1. User submits credentials
+2. Password verified with bcrypt
+3. JWT token generated with user ID, email, role
+4. Token signed with JWT_SECRET
+5. Token expires in 24 hours
+6. Refresh token extends session
+
+### Authorization
+- Middleware checks JWT token validity
+- Extracts user from token payload
+- Verifies user role for admin endpoints
+- Rejects unauthorized requests with 401/403
+
+### Encryption
+- Private keys encrypted with AES-256-GCM
+- Random IV generated per encryption
+- Auth tag for integrity verification
+- Encryption key stored in environment variable
+- Decryption only in memory, never logged
+
+### Input Sanitization
+- All inputs checked for SQL injection patterns
+- XSS payloads detected and blocked
+- Malicious attempts logged with IP and user agent
+- Automatic blocking on repeated attempts
+
+### Rate Limiting
+- Token bucket algorithm
+- Per-IP tracking
+- Different limits for different endpoint types
+- Headers include remaining requests
+- 429 response when exceeded
+
+### Audit Logging
+- All admin actions logged
+- Includes admin ID, action, resource, timestamp
+- Metadata includes relevant details
+- Immutable log entries
+- Queryable with filters
+
+---
+
+## Performance Optimization
+
+### Database
+- Indexes on frequently queried columns
+- Connection pooling enabled
+- Query optimization with selective fields
+- Pagination for large datasets
+
+### Caching
+- Optional Redis for frequently accessed data
+- In-memory caching for config
+- TTL-based cache invalidation
+- Cache warming on startup
+
+### API
+- Response compression (gzip)
+- Streaming for large responses
+- Parallel requests with Promise.all
+- Retry logic with exponential backoff
+
+### Monitoring
+- Health checks for all dependencies
+- Response time tracking
+- Error rate monitoring
+- Memory usage logging
+
+---
+
+## Deployment
+
+### Environment Variables
+```env
+NODE_ENV=production
+PORT=3000
+SUPABASE_URL=...
+SUPABASE_KEY=...
+JWT_SECRET=...
+ENCRYPTION_KEY=...
+SOLANA_RPC_URL=...
+OPENROUTER_API_KEY=...
+AI_MODELS=...
+```
+
+### Docker
+```bash
+docker build -t ordo-backend .
+docker run -p 3000:3000 --env-file .env ordo-backend
+```
+
+### Health Monitoring
+- `/health` for basic check
+- `/health/detailed` for dependency status
+- Automatic alerts on unhealthy status
+
+---
+
+## Admin Utilities
+
+### Create Admin User
+```bash
+npx tsx scripts/update-user-role.ts user@example.com admin
+```
+
+### Database Migrations
+```sql
+-- Run in Supabase SQL Editor
+-- File: src/config/migrations.sql
+```
+
+### Performance Indexes
+```sql
+-- Run in Supabase SQL Editor
+-- File: src/config/indexes.sql
+```
+
+---
+
+## Version Information
+
+- **API Version**: v1
+- **Backend Version**: 1.0.0
+- **Node.js**: 18+
+- **TypeScript**: 5.3+
+- **Last Updated**: 2026-02-01
+
+## Support
+
+- Documentation: `/API.md`, `/DEPLOYMENT.md`, `/PERFORMANCE.md`
+- GitHub: [repository-url]
+- Issues: [issues-url]

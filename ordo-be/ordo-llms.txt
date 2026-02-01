@@ -1,0 +1,630 @@
+# Ordo Backend API - LLM Context
+
+## System Overview
+Ordo adalah REST API backend untuk AI assistant yang dapat melakukan 60+ operasi blockchain Solana melalui natural language. Backend ini menyediakan authentication, wallet management, AI chat dengan function calling, dan transaction tracking.
+
+**Base URL**: `http://localhost:3000/api/v1` (development)
+**Production URL**: `https://api.ordo-assistant.com/api/v1`
+
+## Core Features
+- JWT-based authentication dengan 24-hour token expiration
+- Secure wallet management dengan AES-256-GCM encryption
+- AI chat dengan OpenRouter integration dan function calling
+- Dynamic plugin system untuk Solana operations
+- Transaction recording dan history tracking
+- Real-time streaming responses dengan SSE
+
+## Rate Limiting
+- Global: 100 requests/minute per IP
+- Auth endpoints: 10 requests/minute per IP
+- Semua requests di-log untuk security monitoring
+
+## Authentication Flow
+
+### 1. Register User
+**Endpoint**: `POST /auth/register`
+
+**Request**:
+```json
+{
+  "email": "user@example.com",
+  "password": "Password123!",
+  "name": "John Doe"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "user": {
+      "id": "uuid",
+      "email": "user@example.com",
+      "name": "John Doe",
+      "role": "user"
+    },
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+}
+```
+
+**Password Requirements**:
+- Minimal 8 karakter
+- Harus mengandung huruf besar, huruf kecil, angka, dan simbol
+
+### 2. Login
+**Endpoint**: `POST /auth/login`
+
+**Request**:
+```json
+{
+  "email": "user@example.com",
+  "password": "Password123!"
+}
+```
+
+**Response**: Same as register
+
+### 3. Refresh Token
+**Endpoint**: `POST /auth/refresh`
+
+**Headers**: `Authorization: Bearer <old_token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "token": "new_jwt_token"
+  }
+}
+```
+
+## Wallet Management
+
+### Create Wallet
+**Endpoint**: `POST /wallet/create`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "wallet_uuid",
+    "public_key": "CuSWTUgxq8PJpDhnkXHF123TDrSTSUyFKVGHv4rj9176",
+    "is_primary": true,
+    "created_at": "2026-02-01T00:00:00Z"
+  }
+}
+```
+
+**Notes**:
+- Private key dienkripsi dengan AES-256-GCM
+- First wallet otomatis menjadi primary wallet
+- Wallet disimpan secara aman di database
+
+### Import Wallet
+**Endpoint**: `POST /wallet/import`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "privateKey": "base58_encoded_private_key"
+}
+```
+
+**Response**: Same as create wallet
+
+**Notes**:
+- Private key harus dalam format base58
+- System akan validate format sebelum import
+- Duplicate wallet akan ditolak
+
+### Get Wallet Balance
+**Endpoint**: `GET /wallet/:id/balance`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "sol": 1.5,
+    "tokens": [
+      {
+        "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "amount": 100.5,
+        "decimals": 6
+      }
+    ]
+  }
+}
+```
+
+**Notes**:
+- Query SOL balance dan semua SPL tokens
+- Menggunakan Helius RPC untuk data real-time
+- Automatic retry dengan exponential backoff
+
+### List User Wallets
+**Endpoint**: `GET /wallets`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "wallet_uuid",
+      "public_key": "...",
+      "is_primary": true,
+      "created_at": "2026-02-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+## AI Chat
+
+### Send Message (Non-Streaming)
+**Endpoint**: `POST /chat`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "message": "What is the price of SOL?",
+  "conversationId": "optional_conversation_uuid"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "response": "The current price of SOL is $150.25",
+    "conversationId": "conversation_uuid",
+    "toolCalls": [
+      {
+        "name": "get_sol_price",
+        "result": { "price": 150.25 }
+      }
+    ]
+  }
+}
+```
+
+**Available AI Capabilities**:
+- Get wallet balance
+- Get SOL price
+- Execute Solana operations (via function calling)
+- Natural language understanding
+- Context-aware responses
+
+### Send Message (Streaming)
+**Endpoint**: `POST /chat/stream`
+
+**Headers**: 
+- `Authorization: Bearer <token>`
+- `Content-Type: application/json`
+
+**Request**: Same as non-streaming
+
+**Response**: Server-Sent Events (SSE)
+```
+data: {"token": "The"}
+data: {"token": " current"}
+data: {"token": " price"}
+data: {"token": " of"}
+data: {"token": " SOL"}
+data: {"token": " is"}
+data: {"token": " $150.25"}
+data: [DONE]
+```
+
+**Notes**:
+- Real-time token streaming
+- Automatic reconnection on disconnect
+- Lower latency untuk user experience
+
+### Get Conversations
+**Endpoint**: `GET /conversations`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "conversation_uuid",
+      "user_id": "user_uuid",
+      "status": "active",
+      "created_at": "2026-02-01T00:00:00Z",
+      "updated_at": "2026-02-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+### Get Conversation Messages
+**Endpoint**: `GET /conversations/:id/messages`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "message_uuid",
+      "conversation_id": "conversation_uuid",
+      "role": "user",
+      "content": "What is the price of SOL?",
+      "created_at": "2026-02-01T00:00:00Z"
+    },
+    {
+      "id": "message_uuid",
+      "conversation_id": "conversation_uuid",
+      "role": "assistant",
+      "content": "The current price of SOL is $150.25",
+      "created_at": "2026-02-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+**Notes**:
+- Messages ordered by created_at ascending
+- Includes user, assistant, and system messages
+- Last 10 messages used for context window
+
+## Blockchain Actions
+
+### List Available Actions
+**Endpoint**: `GET /actions`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "name": "get_balance",
+      "description": "Get wallet balance",
+      "plugin": "solana-token",
+      "parameters": []
+    },
+    {
+      "name": "get_sol_price",
+      "description": "Get current SOL price",
+      "plugin": "price-feed",
+      "parameters": []
+    }
+  ]
+}
+```
+
+**Available Actions**:
+- `get_balance` - Get wallet SOL and token balance
+- `get_sol_price` - Get current SOL price from Pyth
+
+### Execute Action Directly
+**Endpoint**: `POST /actions/:actionName`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "params": {}
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "result": { ... }
+  }
+}
+```
+
+**Example - Get Balance**:
+```bash
+POST /actions/get_balance
+{
+  "params": {}
+}
+```
+
+**Example - Get SOL Price**:
+```bash
+POST /actions/get_sol_price
+{
+  "params": {}
+}
+```
+
+## Transaction History
+
+### Get Transaction History
+**Endpoint**: `GET /transactions`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Query Parameters**:
+- `page` (optional): Page number, default 1
+- `limit` (optional): Items per page, default 10, max 100
+- `type` (optional): Filter by transaction type
+- `status` (optional): Filter by status (pending/confirmed/failed)
+- `startDate` (optional): Filter by start date (ISO 8601)
+- `endDate` (optional): Filter by end date (ISO 8601)
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "transactions": [
+      {
+        "id": "tx_uuid",
+        "signature": "solana_signature",
+        "type": "transfer",
+        "status": "confirmed",
+        "amount": 1.5,
+        "created_at": "2026-02-01T00:00:00Z"
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 10,
+      "total": 50,
+      "totalPages": 5
+    }
+  }
+}
+```
+
+**Transaction Types**:
+- `transfer` - SOL or token transfer
+- `swap` - Token swap
+- `stake` - Staking operation
+- `mint` - NFT minting
+- `other` - Other operations
+
+**Transaction Status**:
+- `pending` - Submitted to blockchain
+- `confirmed` - Confirmed on blockchain
+- `failed` - Transaction failed
+
+### Get Transaction Details
+**Endpoint**: `GET /transactions/:id`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "tx_uuid",
+    "signature": "solana_signature",
+    "type": "transfer",
+    "status": "confirmed",
+    "amount": 1.5,
+    "metadata": {
+      "from": "wallet_address",
+      "to": "recipient_address"
+    },
+    "created_at": "2026-02-01T00:00:00Z",
+    "updated_at": "2026-02-01T00:00:00Z"
+  }
+}
+```
+
+## Health Check
+
+### Basic Health Check
+**Endpoint**: `GET /health`
+
+**Response**:
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-02-01T00:00:00Z"
+}
+```
+
+### Detailed Health Check
+**Endpoint**: `GET /health/detailed`
+
+**Response**:
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-02-01T00:00:00Z",
+  "uptime": 170,
+  "version": "1.0.0",
+  "dependencies": {
+    "database": {
+      "status": "healthy",
+      "responseTime": 552
+    },
+    "solanaRpc": {
+      "status": "healthy",
+      "responseTime": 611
+    },
+    "openRouter": {
+      "status": "healthy",
+      "responseTime": 137
+    }
+  }
+}
+```
+
+## Error Handling
+
+### Error Response Format
+```json
+{
+  "success": false,
+  "error": "Error message"
+}
+```
+
+### Common Error Codes
+- `400` - Bad Request (invalid input)
+- `401` - Unauthorized (invalid/expired token)
+- `403` - Forbidden (insufficient permissions)
+- `404` - Not Found
+- `409` - Conflict (duplicate resource)
+- `429` - Too Many Requests (rate limit exceeded)
+- `500` - Internal Server Error
+- `503` - Service Unavailable (dependency down)
+
+### Error Examples
+
+**Invalid Token**:
+```json
+{
+  "success": false,
+  "error": "Invalid or expired token"
+}
+```
+
+**Rate Limit Exceeded**:
+```json
+{
+  "success": false,
+  "error": "Too many requests",
+  "message": "You have exceeded the rate limit. Please try again later."
+}
+```
+
+**Validation Error**:
+```json
+{
+  "success": false,
+  "error": "Validation failed",
+  "errors": [
+    {
+      "field": "email",
+      "message": "Invalid email format"
+    }
+  ]
+}
+```
+
+## Security Features
+
+### Input Sanitization
+- SQL injection patterns automatically blocked
+- XSS payloads automatically blocked
+- All malicious attempts logged
+
+### Data Encryption
+- Private keys encrypted with AES-256-GCM
+- Passwords hashed with bcrypt (10 salt rounds)
+- JWT tokens with 24-hour expiration
+
+### Rate Limiting
+- Global: 100 requests/minute per IP
+- Auth: 10 requests/minute per IP
+- Automatic blocking on excessive requests
+
+## Best Practices
+
+### Authentication
+1. Store JWT token securely (not in localStorage)
+2. Refresh token before expiration
+3. Handle 401 errors by redirecting to login
+4. Never expose token in URLs or logs
+
+### API Usage
+1. Always include Authorization header
+2. Handle rate limiting gracefully
+3. Implement exponential backoff on errors
+4. Use pagination for large datasets
+5. Cache responses when appropriate
+
+### Error Handling
+1. Check `success` field in response
+2. Display user-friendly error messages
+3. Log errors for debugging
+4. Implement retry logic for network errors
+
+### Performance
+1. Use streaming for real-time responses
+2. Implement request debouncing
+3. Cache frequently accessed data
+4. Use pagination for lists
+5. Minimize payload size
+
+## Example Usage Flow
+
+```javascript
+// 1. Register/Login
+const authResponse = await fetch('http://localhost:3000/api/v1/auth/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'user@example.com',
+    password: 'Password123!'
+  })
+});
+const { data: { token } } = await authResponse.json();
+
+// 2. Create Wallet
+const walletResponse = await fetch('http://localhost:3000/api/v1/wallet/create', {
+  method: 'POST',
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+const { data: wallet } = await walletResponse.json();
+
+// 3. Get Balance
+const balanceResponse = await fetch(`http://localhost:3000/api/v1/wallet/${wallet.id}/balance`, {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+const { data: balance } = await balanceResponse.json();
+
+// 4. Chat with AI
+const chatResponse = await fetch('http://localhost:3000/api/v1/chat', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    message: 'What is the price of SOL?'
+  })
+});
+const { data: chatData } = await chatResponse.json();
+```
+
+## Support & Resources
+
+- API Documentation: `/API.md`
+- GitHub Repository: [repository-url]
+- Issue Tracker: [issues-url]
+
+## Version Information
+
+- **API Version**: v1
+- **Backend Version**: 1.0.0
+- **Last Updated**: 2026-02-01
