@@ -3,8 +3,15 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install Python and build tools for native dependencies
-RUN apk add --no-cache python3 make g++
+# Install Python, build tools, and USB libraries for native dependencies
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    pkgconfig \
+    libusb-dev \
+    eudev-dev \
+    linux-headers
 
 # Copy package files
 COPY package*.json ./
@@ -23,14 +30,21 @@ FROM node:22-alpine
 
 WORKDIR /app
 
-# Install Python and build tools for native dependencies
-RUN apk add --no-cache python3 make g++
+# Install Python, build tools, and USB libraries (needed for native modules)
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    pkgconfig \
+    libusb-dev \
+    eudev-dev \
+    linux-headers
 
 # Copy package files
 COPY package*.json ./
 
 # Install production dependencies only
-RUN npm install --only=production
+RUN npm install --omit=dev
 
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
