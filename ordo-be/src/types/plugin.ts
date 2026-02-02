@@ -57,4 +57,8 @@ export interface Tool {
     properties: Record<string, any>;
     required?: string[];
   };
+  source?: 'plugin' | 'mcp'; // Tool source
+  serverId?: string; // MCP server ID (if source is 'mcp')
+  serverName?: string; // MCP server name (if source is 'mcp')
+  originalName?: string; // Original tool name from MCP server
 }

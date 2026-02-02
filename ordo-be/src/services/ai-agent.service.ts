@@ -2,7 +2,8 @@ import axios from 'axios';
 import env from '../config/env';
 import logger from '../config/logger';
 import pluginManager from './plugin-manager.service';
-import { ActionContext } from '../types/plugin';
+import { mcpClientService } from './mcp-client.service';
+import { ActionContext, Tool } from '../types/plugin';
 import { retryWithBackoff } from '../utils/retry';
 
 interface Message {
@@ -61,8 +62,8 @@ export class AIAgentService {
       try {
         const currentModel = this.getCurrentModel();
         
-        // Get available tools from plugins
-        const tools = this.getToolsFromPlugins();
+        // Get available tools from plugins and MCP servers
+        const tools = await this.getAllAvailableTools();
 
         // Build messages array
         const messages: Message[] = [
@@ -206,6 +207,37 @@ Always be helpful, concise, and accurate. When users ask to perform blockchain o
     throw new Error(`AI chat failed with all ${maxRetries} models: ${errorMessage}`);
   }
 
+  private async getAllAvailableTools(): Promise<any[]> {
+    // Get local plugin tools
+    const pluginTools = this.getToolsFromPlugins();
+
+    // Get remote MCP tools
+    let mcpTools: any[] = [];
+    try {
+      const mcpToolsList = await mcpClientService.getAvailableTools();
+      mcpTools = mcpToolsList.map((tool: Tool) => ({
+        type: 'function',
+        function: {
+          name: tool.name,
+          description: tool.description,
+          parameters: tool.parameters,
+        },
+      }));
+
+      logger.info('Merged tools from plugins and MCP servers', {
+        pluginTools: pluginTools.length,
+        mcpTools: mcpTools.length,
+        total: pluginTools.length + mcpTools.length,
+      });
+    } catch (error: any) {
+      logger.error('Failed to fetch MCP tools, continuing with plugin tools only', {
+        error: error.message,
+      });
+    }
+
+    return [...pluginTools, ...mcpTools];
+  }
+
   private getToolsFromPlugins(): any[] {
     const actions = pluginManager.getAvailableActions();
 
@@ -243,7 +275,16 @@ Always be helpful, concise, and accurate. When users ask to perform blockchain o
 
         logger.info(`Executing tool: ${functionName}`, { args });
 
-        const result = await pluginManager.executeAction(functionName, args, context);
+        let result: any;
+
+        // Check if this is an MCP tool (contains __)
+        if (functionName.includes('__')) {
+          // Execute via MCP client
+          result = await mcpClientService.executeTool(functionName, args);
+        } else {
+          // Execute via plugin manager
+          result = await pluginManager.executeAction(functionName, args, context);
+        }
 
         results.push({
           id: toolCall.id,
@@ -270,7 +311,7 @@ Always be helpful, concise, and accurate. When users ask to perform blockchain o
   ): AsyncGenerator<string, void, unknown> {
     try {
       const currentModel = this.getCurrentModel();
-      const tools = this.getToolsFromPlugins();
+      const tools = await this.getAllAvailableTools();
 
       const messages: Message[] = [
         {

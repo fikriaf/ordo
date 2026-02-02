@@ -285,6 +285,7 @@ export class MCPClientService {
       const headers: Record<string, string> = {
         'Accept': 'text/event-stream',
         'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
         ...server.headers,
       };
 
@@ -295,15 +296,15 @@ export class MCPClientService {
       let sessionEndpoint: string | null = null;
       let buffer = '';
       let stream: any = null;
+      const messageQueue = new Map<number, {resolve: Function, reject: Function}>();
 
       axios.get(url, {
         headers,
         responseType: 'stream',
-        timeout,
+        timeout: 0, // No timeout for persistent connection
       })
         .then(response => {
           stream = response.data;
-          const messageQueue = new Map<number, {resolve: Function, reject: Function}>();
 
           stream.on('data', (chunk: Buffer) => {
             buffer += chunk.toString();
@@ -334,7 +335,7 @@ export class MCPClientService {
                       serverId: server.id,
                     });
                     
-                    // Resolve with session but DON'T return - keep processing
+                    // Resolve with session - stream continues listening
                     resolve({
                       sessionEndpoint,
                       stream,
@@ -357,6 +358,11 @@ export class MCPClientService {
                   if (parsed.id && messageQueue.has(parsed.id)) {
                     const handler = messageQueue.get(parsed.id)!;
                     messageQueue.delete(parsed.id);
+                    
+                    // Clear timeout if it exists
+                    if ((handler as any).timeout) {
+                      clearTimeout((handler as any).timeout);
+                    }
                     
                     logger.info(`[SSE] Response received for request ${parsed.id}`, {
                       serverId: server.id,
@@ -391,16 +397,35 @@ export class MCPClientService {
               serverId: server.id,
               error: error.message,
             });
-            reject(new Error(`SSE stream error: ${error.message}`));
+            // Reject all pending requests
+            messageQueue.forEach((handler) => {
+              handler.reject(new Error(`SSE stream error: ${error.message}`));
+            });
+            messageQueue.clear();
+            
+            if (!sessionEndpoint) {
+              reject(new Error(`SSE stream error: ${error.message}`));
+            }
           });
 
           stream.on('end', () => {
             logger.info(`SSE stream ended`, {
               serverId: server.id,
             });
+            // Reject all pending requests
+            messageQueue.forEach((handler) => {
+              handler.reject(new Error('SSE stream ended'));
+            });
+            messageQueue.clear();
           });
 
-          // Timeout for session establishment
+          stream.on('close', () => {
+            logger.info(`SSE stream closed`, {
+              serverId: server.id,
+            });
+          });
+
+          // Timeout for session establishment only
           setTimeout(() => {
             if (!sessionEndpoint) {
               stream.destroy();
@@ -445,9 +470,11 @@ export class MCPClientService {
       logger.info(`Sending SSE message: ${method}`, {
         serverId,
         requestId,
+        url,
+        queueSize: session.messageQueue.size,
       });
 
-      // Register response handler
+      // Register response handler BEFORE sending request
       session.messageQueue.set(requestId, { resolve, reject });
 
       const headers: Record<string, string> = {
@@ -466,26 +493,42 @@ export class MCPClientService {
         id: requestId,
       };
 
+      logger.debug(`[SSE] Request body:`, {
+        serverId,
+        requestId,
+        body: JSON.stringify(requestBody),
+      });
+
       // Send POST request
       axios.post(url, requestBody, {
         headers,
-        timeout,
+        timeout: 10000, // Short timeout for POST itself
       })
         .then(response => {
-          logger.debug(`SSE message sent, waiting for response...`, {
+          logger.info(`[SSE] POST request completed, waiting for SSE response...`, {
             serverId,
             requestId,
             status: response.status,
+            statusText: response.statusText,
+            queueSize: session.messageQueue.size,
           });
           
           // Response will come via SSE stream
           // Set timeout for response
-          setTimeout(() => {
+          const responseTimeout = setTimeout(() => {
             if (session.messageQueue.has(requestId)) {
               session.messageQueue.delete(requestId);
+              logger.error(`[SSE] Response timeout for request ${requestId}`, {
+                serverId,
+                method,
+                queueSize: session.messageQueue.size,
+              });
               reject(new Error('SSE response timeout'));
             }
           }, timeout);
+
+          // Store timeout so we can clear it if response arrives
+          (session.messageQueue.get(requestId) as any).timeout = responseTimeout;
         })
         .catch(error => {
           session.messageQueue.delete(requestId);
@@ -493,6 +536,8 @@ export class MCPClientService {
             serverId,
             requestId,
             error: error.message,
+            status: error.response?.status,
+            data: error.response?.data,
           });
           reject(new Error(`SSE message send failed: ${error.message}`));
         });

@@ -7,9 +7,10 @@ REST API backend untuk Ordo - AI assistant yang dapat melakukan 60+ operasi bloc
 - **Authentication & Authorization**: JWT-based auth dengan role-based access control
 - **Wallet Management**: Create, import, dan query balance wallet Solana
 - **AI Agent**: OpenRouter integration dengan function calling dan streaming
+- **MCP Integration**: Connect to remote Model Context Protocol servers for extended capabilities
 - **Plugin System**: Dynamic plugin registration untuk extensibility
 - **Transaction Management**: Recording, tracking, dan history dengan pagination
-- **Admin Panel**: Dashboard, user management, model management, plugin management
+- **Admin Panel**: Dashboard, user management, model management, plugin management, MCP server management
 - **Security**: Rate limiting, input sanitization, encryption, error handling
 - **Monitoring**: Health checks untuk semua dependencies
 
@@ -121,24 +122,6 @@ curl -X POST http://localhost:3000/api/v1/wallet/create \
 ```
 
 4. **Chat with AI**:
-```bash
-curl -X POST http://localhost:3000/api/v1/chat \
-  -H "Authorization: Bearer <your_token>" \
-  -H "Content-Type: application/json" \
-  -d '{"message":"What is the price of SOL?"}'
-```
-
-## 🔧 Scripts
-
-- `npm run dev` - Run development server dengan hot reload
-- `npm run build` - Build untuk production
-- `npm start` - Run production server
-- `npm test` - Run tests
-- `npm run lint` - Run ESLint
-- `npm run lint:fix` - Fix ESLint errors
-- `npm run format` - Format code dengan Prettier
-
-## 🏗️ Project Structure
 
 ```
 ordo-be/
@@ -165,6 +148,8 @@ ordo-be/
 │   │   ├── auth.service.ts
 │   │   ├── wallet.service.ts
 │   │   ├── ai-agent.service.ts
+│   │   ├── mcp-client.service.ts
+│   │   ├── mcp-server.service.ts
 │   │   ├── plugin-manager.service.ts
 │   │   ├── solana-agent.service.ts
 │   │   ├── transaction.service.ts
@@ -235,8 +220,73 @@ npx tsx scripts/update-user-role.ts user@example.com admin
 - User management (list, view, delete)
 - AI model management (CRUD, enable/disable)
 - Plugin management (CRUD, enable/disable)
+- MCP server management (CRUD, enable/disable, cache control)
 - Configuration management (hot reload, history, rollback)
 - Audit logs
+
+## 🔌 MCP Integration
+
+Ordo Backend supports Model Context Protocol (MCP) servers for extending AI capabilities with remote tools.
+
+### Supported Transport Types
+- **HTTP**: Standard HTTP requests
+- **SSE**: Server-Sent Events for streaming
+- **STDIO**: Not supported on Railway deployment
+
+### MCP Features
+- Dynamic tool discovery from remote servers
+- Tool caching (5-minute TTL) for performance
+- Automatic tool merging with local plugins
+- Per-server authentication (API keys, custom headers)
+- Enable/disable servers without deletion
+- Cache management for updated servers
+
+### Adding MCP Servers
+
+Use admin endpoints to add MCP servers:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/admin/mcp-servers \
+  -H "Authorization: Bearer <admin_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "weather-mcp",
+    "description": "Weather data provider",
+    "transport_type": "http",
+    "server_url": "https://weather-mcp.example.com",
+    "api_key": "your_api_key",
+    "headers": {
+      "X-Custom-Header": "value"
+    },
+    "is_enabled": true,
+    "config": {
+      "timeout": 30000
+    }
+  }'
+```
+
+### How It Works
+
+1. **Tool Discovery**: When AI agent starts, it fetches tools from all enabled MCP servers
+2. **Tool Merging**: MCP tools are merged with local plugin tools
+3. **Tool Naming**: MCP tools are prefixed with server name (e.g., `weather-mcp__get_forecast`)
+4. **Tool Execution**: AI decides which tool to use, backend routes to appropriate service
+5. **Caching**: Tools are cached for 5 minutes to reduce latency
+
+### MCP Endpoints
+
+**Public**:
+- `GET /api/v1/mcp-servers` - List enabled servers (no sensitive data)
+
+**Admin**:
+- `GET /api/v1/admin/mcp-servers` - List all servers
+- `GET /api/v1/admin/mcp-servers/:id` - Get server details
+- `POST /api/v1/admin/mcp-servers` - Create server
+- `PUT /api/v1/admin/mcp-servers/:id` - Update server
+- `DELETE /api/v1/admin/mcp-servers/:id` - Delete server
+- `PUT /api/v1/admin/mcp-servers/:id/enable` - Enable server
+- `PUT /api/v1/admin/mcp-servers/:id/disable` - Disable server
+- `POST /api/v1/admin/mcp-servers/cache/clear` - Clear tools cache
 
 ## 📊 Monitoring
 
