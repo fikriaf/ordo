@@ -1,12 +1,16 @@
 import supabase from '../config/database';
 import logger from '../config/logger';
 
+export type MCPTransportType = 'http' | 'sse';
+
 export interface MCPServer {
   id: string;
   name: string;
   description?: string;
+  transport_type: MCPTransportType;
   server_url: string;
   api_key?: string;
+  headers?: Record<string, string>;
   is_enabled: boolean;
   config: Record<string, any>;
   metadata: Record<string, any>;
@@ -17,8 +21,10 @@ export interface MCPServer {
 export interface CreateMCPServerInput {
   name: string;
   description?: string;
+  transport_type: MCPTransportType;
   server_url: string;
   api_key?: string;
+  headers?: Record<string, string>;
   is_enabled?: boolean;
   config?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -27,8 +33,10 @@ export interface CreateMCPServerInput {
 export interface UpdateMCPServerInput {
   name?: string;
   description?: string;
+  transport_type?: MCPTransportType;
   server_url?: string;
   api_key?: string;
+  headers?: Record<string, string>;
   is_enabled?: boolean;
   config?: Record<string, any>;
   metadata?: Record<string, any>;
@@ -36,11 +44,11 @@ export interface UpdateMCPServerInput {
 
 export class MCPServerService {
   // Get all MCP servers (public - without sensitive data)
-  async getAllPublic(): Promise<Omit<MCPServer, 'api_key'>[]> {
+  async getAllPublic(): Promise<Omit<MCPServer, 'api_key' | 'headers'>[]> {
     try {
       const { data, error } = await supabase
         .from('mcp_servers')
-        .select('id, name, description, server_url, is_enabled, config, metadata, created_at, updated_at')
+        .select('id, name, description, transport_type, server_url, is_enabled, config, metadata, created_at, updated_at')
         .eq('is_enabled', true)
         .order('name', { ascending: true });
 
@@ -102,8 +110,10 @@ export class MCPServerService {
         .insert({
           name: input.name,
           description: input.description,
+          transport_type: input.transport_type,
           server_url: input.server_url,
           api_key: input.api_key,
+          headers: input.headers || {},
           is_enabled: input.is_enabled ?? true,
           config: input.config || {},
           metadata: input.metadata || {},
@@ -116,6 +126,7 @@ export class MCPServerService {
       // Log audit
       await this.logAudit(adminId, 'create', 'mcp_server', data.id, {
         name: input.name,
+        transport_type: input.transport_type,
         server_url: input.server_url,
       });
 
@@ -138,8 +149,10 @@ export class MCPServerService {
         .update({
           ...(input.name && { name: input.name }),
           ...(input.description !== undefined && { description: input.description }),
+          ...(input.transport_type && { transport_type: input.transport_type }),
           ...(input.server_url && { server_url: input.server_url }),
           ...(input.api_key !== undefined && { api_key: input.api_key }),
+          ...(input.headers && { headers: input.headers }),
           ...(input.is_enabled !== undefined && { is_enabled: input.is_enabled }),
           ...(input.config && { config: input.config }),
           ...(input.metadata && { metadata: input.metadata }),

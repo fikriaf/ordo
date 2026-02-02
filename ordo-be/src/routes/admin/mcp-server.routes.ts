@@ -9,8 +9,10 @@ const router = Router();
 const createMCPServerSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().optional(),
+  transport_type: z.enum(['http', 'sse']),
   server_url: z.string().url().max(500),
   api_key: z.string().optional(),
+  headers: z.record(z.string()).optional(),
   is_enabled: z.boolean().optional(),
   config: z.record(z.any()).optional(),
   metadata: z.record(z.any()).optional(),
@@ -19,8 +21,10 @@ const createMCPServerSchema = z.object({
 const updateMCPServerSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
+  transport_type: z.enum(['http', 'sse']).optional(),
   server_url: z.string().url().max(500).optional(),
   api_key: z.string().optional(),
+  headers: z.record(z.string()).optional(),
   is_enabled: z.boolean().optional(),
   config: z.record(z.any()).optional(),
   metadata: z.record(z.any()).optional(),
