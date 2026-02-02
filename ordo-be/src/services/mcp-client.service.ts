@@ -1,4 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
+import * as https from 'https';
+import * as http from 'http';
 import { mcpServerService, MCPServer } from './mcp-server.service';
 import logger from '../config/logger';
 import { Tool } from '../types/plugin';
@@ -206,7 +208,7 @@ export class MCPClientService {
 
   /**
    * Fetch tools from SSE-based MCP server
-   * Supports session-based SSE (standard MCP pattern)
+   * SSE servers use /sse for session, then POST to /tools via session endpoint
    */
   private async fetchToolsSSE(server: MCPServer): Promise<MCPTool[]> {
     logger.info(`[SSE] Starting fetchToolsSSE for ${server.name}`, {
@@ -227,13 +229,23 @@ export class MCPClientService {
       logger.info(`[SSE] Using existing session for ${server.name}`);
     }
 
-    // Send tools/list request via session
+    // Get tools path from config, default to /tools
+    const toolsPath = server.config?.tools_path || '/tools';
+
+    // Send request to list tools
     try {
-      logger.info(`[SSE] Sending tools/list request for ${server.name}`);
-      const response = await this.sendSSEMessage(server.id, 'tools/list', {});
+      logger.info(`[SSE] Sending request to ${toolsPath} for ${server.name}`);
+      const response = await this.sendSSEMessage(server.id, toolsPath, {
+        jsonrpc: '2.0',
+        method: 'tools/list',
+        params: {},
+        id: Date.now(),
+      });
+      
       logger.info(`[SSE] Received response for ${server.name}`, {
         hasResult: !!response.result,
         hasTools: !!response.tools,
+        response: JSON.stringify(response).substring(0, 500),
       });
       
       if (response.result?.tools) {
@@ -244,41 +256,59 @@ export class MCPClientService {
         return response.tools;
       }
       
-      logger.warn(`[SSE] No tools found in response for ${server.name}`);
+      logger.warn(`[SSE] No tools found in response for ${server.name}`, {
+        responseKeys: Object.keys(response),
+      });
       return [];
     } catch (error: any) {
-      // If session failed, try to recreate
+      // If session failed, try to recreate ONCE
       logger.warn(`[SSE] Session failed for ${server.name}, recreating...`, {
         serverId: server.id,
         error: error.message,
       });
       
       this.closeSSESession(server.id);
-      session = await this.createSSESession(server);
-      this.sseSessions.set(server.id, session);
       
-      const response = await this.sendSSEMessage(server.id, 'tools/list', {});
-      
-      if (response.result?.tools) {
-        return response.result.tools;
-      } else if (response.tools) {
-        return response.tools;
+      try {
+        session = await this.createSSESession(server);
+        this.sseSessions.set(server.id, session);
+        
+        const response = await this.sendSSEMessage(server.id, toolsPath, {
+          jsonrpc: '2.0',
+          method: 'tools/list',
+          params: {},
+          id: Date.now(),
+        });
+        
+        if (response.result?.tools) {
+          return response.result.tools;
+        } else if (response.tools) {
+          return response.tools;
+        }
+        
+        return [];
+      } catch (retryError: any) {
+        logger.error(`[SSE] Retry failed for ${server.name}`, {
+          serverId: server.id,
+          error: retryError.message,
+        });
+        throw retryError;
       }
-      
-      return [];
     }
   }
 
   /**
-   * Create SSE session with MCP server
+   * Create SSE session with MCP server using native Node.js HTTP
+   * SSE endpoint is always /sse for session establishment
    */
   private async createSSESession(server: MCPServer): Promise<SSESession> {
     return new Promise((resolve, reject) => {
-      const sseEndpoint = server.config?.tools_path || server.config?.toolsPath || '/sse';
-      const url = `${server.server_url}${sseEndpoint}`;
+      // SSE endpoint is always /sse for establishing session
+      const sseEndpoint = '/sse';
+      const url = new URL(`${server.server_url}${sseEndpoint}`);
       const timeout = server.config?.timeout || 30000;
 
-      logger.info(`Creating SSE session: ${url}`, {
+      logger.info(`Creating SSE session: ${url.href}`, {
         serverId: server.id,
       });
 
@@ -295,185 +325,194 @@ export class MCPClientService {
 
       let sessionEndpoint: string | null = null;
       let buffer = '';
-      let stream: any = null;
+      let req: any = null;
       const messageQueue = new Map<number, {resolve: Function, reject: Function}>();
       let isResolved = false;
 
-      axios.get(url, {
+      const protocol = url.protocol === 'https:' ? https : http;
+
+      const options = {
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: url.pathname + url.search,
+        method: 'GET',
         headers,
-        responseType: 'stream',
-        timeout: 0, // No timeout for persistent connection
-        httpAgent: new (require('http').Agent)({ keepAlive: true }),
-        httpsAgent: new (require('https').Agent)({ keepAlive: true }),
-      })
-        .then(response => {
-          stream = response.data;
+      };
 
-          // Prevent stream from pausing
-          stream.setEncoding('utf8');
-          stream.resume();
+      req = protocol.request(options, (res) => {
+        logger.info(`SSE connection established, status: ${res.statusCode}`, {
+          serverId: server.id,
+        });
 
-          stream.on('data', (chunk: Buffer | string) => {
-            const chunkStr = typeof chunk === 'string' ? chunk : chunk.toString();
-            buffer += chunkStr;
-            const lines = buffer.split('\n');
-            buffer = lines.pop() || '';
+        res.setEncoding('utf8');
 
-            logger.debug(`[SSE] Received ${lines.length} lines from stream`, {
-              serverId: server.id,
-            });
+        res.on('data', (chunk: string) => {
+          buffer += chunk;
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
 
-            for (const line of lines) {
-              if (line.startsWith('event: ')) {
-                const eventType = line.slice(7).trim();
-                logger.debug(`[SSE] Event type: ${eventType}`, { serverId: server.id });
-              } else if (line.startsWith('data: ')) {
-                const data = line.slice(6).trim();
-                if (data === '' || data === '[DONE]') continue;
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              const eventType = line.slice(7).trim();
+              logger.debug(`[SSE] Event type: ${eventType}`, { serverId: server.id });
+            } else if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '' || data === '[DONE]') continue;
 
-                logger.debug(`[SSE] Data received: ${data.substring(0, 200)}`, {
-                  serverId: server.id,
-                });
+              logger.debug(`[SSE] Data received: ${data.substring(0, 200)}`, {
+                serverId: server.id,
+              });
 
-                // Check if this is session endpoint
-                if (data.startsWith('/message')) {
-                  if (!sessionEndpoint) {
-                    sessionEndpoint = data;
-                    logger.info(`SSE session established: ${sessionEndpoint}`, {
-                      serverId: server.id,
-                    });
-                    
-                    // Resolve with session - stream continues listening
-                    if (!isResolved) {
-                      isResolved = true;
-                      resolve({
-                        sessionEndpoint,
-                        stream,
-                        messageQueue,
-                        buffer,
-                      });
-                    }
-                  }
-                  continue; // Continue processing other messages
-                }
-
-                // Try to parse as JSON response
-                try {
-                  const parsed = JSON.parse(data);
-                  
-                  logger.debug(`[SSE] Parsed JSON, id: ${parsed.id}, has result: ${!!parsed.result}`, {
+              // Check if this is session endpoint
+              if (data.startsWith('/message')) {
+                if (!sessionEndpoint) {
+                  sessionEndpoint = data;
+                  logger.info(`SSE session established: ${sessionEndpoint}`, {
                     serverId: server.id,
                   });
                   
-                  // Check if this is a response to a request
-                  if (parsed.id && messageQueue.has(parsed.id)) {
-                    const handler = messageQueue.get(parsed.id)!;
-                    messageQueue.delete(parsed.id);
-                    
-                    // Clear timeout if it exists
-                    if ((handler as any).timeout) {
-                      clearTimeout((handler as any).timeout);
-                    }
-                    
-                    logger.info(`[SSE] Response received for request ${parsed.id}`, {
-                      serverId: server.id,
-                      hasError: !!parsed.error,
-                      hasResult: !!parsed.result,
-                    });
-                    
-                    if (parsed.error) {
-                      handler.reject(new Error(parsed.error.message || 'SSE request failed'));
-                    } else {
-                      handler.resolve(parsed);
-                    }
-                  } else {
-                    logger.debug(`[SSE] JSON parsed but no matching request in queue`, {
-                      serverId: server.id,
-                      parsedId: parsed.id,
-                      queueSize: messageQueue.size,
-                    });
-                  }
-                } catch (e) {
-                  // Not JSON, might be ping or other message
-                  if (data.includes('ping')) {
-                    logger.debug(`[SSE] Ping received`, { serverId: server.id });
-                  } else {
-                    logger.debug(`[SSE] Data not JSON: ${data.substring(0, 100)}`, {
-                      serverId: server.id,
+                  // Resolve with session - stream continues listening
+                  if (!isResolved) {
+                    isResolved = true;
+                    resolve({
+                      sessionEndpoint,
+                      stream: res,
+                      messageQueue,
+                      buffer,
                     });
                   }
                 }
-              } else if (line.startsWith(': ')) {
-                // SSE comment (often used for keep-alive pings)
-                logger.debug(`[SSE] Comment/ping: ${line.substring(0, 50)}`, {
+                continue;
+              }
+
+              // Try to parse as JSON response
+              try {
+                const parsed = JSON.parse(data);
+                
+                logger.debug(`[SSE] Parsed JSON, id: ${parsed.id}, has result: ${!!parsed.result}`, {
                   serverId: server.id,
                 });
+                
+                // Check if this is a response to a request
+                if (parsed.id && messageQueue.has(parsed.id)) {
+                  const handler = messageQueue.get(parsed.id)!;
+                  messageQueue.delete(parsed.id);
+                  
+                  // Clear timeout if it exists
+                  if ((handler as any).timeout) {
+                    clearTimeout((handler as any).timeout);
+                  }
+                  
+                  logger.info(`[SSE] Response received for request ${parsed.id}`, {
+                    serverId: server.id,
+                    hasError: !!parsed.error,
+                    hasResult: !!parsed.result,
+                  });
+                  
+                  if (parsed.error) {
+                    handler.reject(new Error(parsed.error.message || 'SSE request failed'));
+                  } else {
+                    handler.resolve(parsed);
+                  }
+                } else {
+                  logger.debug(`[SSE] JSON parsed but no matching request in queue`, {
+                    serverId: server.id,
+                    parsedId: parsed.id,
+                    queueSize: messageQueue.size,
+                  });
+                }
+              } catch (e) {
+                // Not JSON, might be ping or other message
+                if (data.includes('ping')) {
+                  logger.debug(`[SSE] Ping received`, { serverId: server.id });
+                } else {
+                  logger.debug(`[SSE] Data not JSON: ${data.substring(0, 100)}`, {
+                    serverId: server.id,
+                  });
+                }
               }
+            } else if (line.startsWith(': ')) {
+              // SSE comment (often used for keep-alive pings)
+              logger.debug(`[SSE] Comment/ping: ${line.substring(0, 50)}`, {
+                serverId: server.id,
+              });
             }
-          });
+          }
+        });
 
-          stream.on('error', (error: Error) => {
-            logger.error(`SSE stream error`, {
-              serverId: server.id,
-              error: error.message,
-            });
-            // Reject all pending requests
-            messageQueue.forEach((handler) => {
+        res.on('error', (error: Error) => {
+          logger.error(`SSE stream error`, {
+            serverId: server.id,
+            error: error.message,
+          });
+          // Reject all pending requests
+          messageQueue.forEach((handler) => {
+            if ((handler as any).timeout) {
+              clearTimeout((handler as any).timeout);
+            }
+            handler.reject(new Error(`SSE stream error: ${error.message}`));
+          });
+          messageQueue.clear();
+          
+          if (!isResolved) {
+            isResolved = true;
+            reject(new Error(`SSE stream error: ${error.message}`));
+          }
+        });
+
+        res.on('end', () => {
+          logger.warn(`SSE stream ended`, {
+            serverId: server.id,
+            pendingRequests: messageQueue.size,
+            queueIds: Array.from(messageQueue.keys()),
+          });
+          
+          // Only reject pending requests if there are any
+          if (messageQueue.size > 0) {
+            messageQueue.forEach((handler, requestId) => {
               if ((handler as any).timeout) {
                 clearTimeout((handler as any).timeout);
               }
-              handler.reject(new Error(`SSE stream error: ${error.message}`));
-            });
-            messageQueue.clear();
-            
-            if (!isResolved) {
-              isResolved = true;
-              reject(new Error(`SSE stream error: ${error.message}`));
-            }
-          });
-
-          stream.on('end', () => {
-            logger.info(`SSE stream ended`, {
-              serverId: server.id,
-            });
-            // Reject all pending requests
-            messageQueue.forEach((handler) => {
-              if ((handler as any).timeout) {
-                clearTimeout((handler as any).timeout);
-              }
+              logger.error(`Rejecting pending request ${requestId} due to stream end`, {
+                serverId: server.id,
+              });
               handler.reject(new Error('SSE stream ended'));
             });
             messageQueue.clear();
-          });
-
-          stream.on('close', () => {
-            logger.info(`SSE stream closed`, {
-              serverId: server.id,
-            });
-          });
-
-          // Timeout for session establishment only
-          setTimeout(() => {
-            if (!isResolved) {
-              isResolved = true;
-              if (stream) {
-                stream.destroy();
-              }
-              reject(new Error('SSE session establishment timeout'));
-            }
-          }, timeout);
-        })
-        .catch(error => {
-          logger.error(`SSE connection failed`, {
-            serverId: server.id,
-            error: error.message,
-            url,
-          });
-          if (!isResolved) {
-            isResolved = true;
-            reject(new Error(`SSE connection failed: ${error.message}`));
           }
         });
+
+        res.on('close', () => {
+          logger.info(`SSE stream closed`, {
+            serverId: server.id,
+          });
+        });
+      });
+
+      req.on('error', (error: Error) => {
+        logger.error(`SSE connection failed`, {
+          serverId: server.id,
+          error: error.message,
+          url: url.href,
+        });
+        if (!isResolved) {
+          isResolved = true;
+          reject(new Error(`SSE connection failed: ${error.message}`));
+        }
+      });
+
+      // Timeout for session establishment only
+      setTimeout(() => {
+        if (!isResolved) {
+          isResolved = true;
+          if (req) {
+            req.destroy();
+          }
+          reject(new Error('SSE session establishment timeout'));
+        }
+      }, timeout);
+
+      req.end();
     });
   }
 
@@ -482,8 +521,8 @@ export class MCPClientService {
    */
   private async sendSSEMessage(
     serverId: string,
-    method: string,
-    params: any
+    path: string,
+    body: any
   ): Promise<any> {
     const session = this.sseSessions.get(serverId);
     if (!session) {
@@ -498,9 +537,9 @@ export class MCPClientService {
     return new Promise((resolve, reject) => {
       const url = `${server.server_url}${session.sessionEndpoint}`;
       const timeout = server.config?.timeout || 30000;
-      const requestId = Date.now();
+      const requestId = body.id || Date.now();
 
-      logger.info(`Sending SSE message: ${method}`, {
+      logger.info(`Sending SSE message to ${path}`, {
         serverId,
         requestId,
         url,
@@ -519,21 +558,14 @@ export class MCPClientService {
         headers['Authorization'] = `Bearer ${server.api_key}`;
       }
 
-      const requestBody = {
-        jsonrpc: '2.0',
-        method,
-        params,
-        id: requestId,
-      };
-
       logger.debug(`[SSE] Request body:`, {
         serverId,
         requestId,
-        body: JSON.stringify(requestBody),
+        body: JSON.stringify(body),
       });
 
       // Send POST request
-      axios.post(url, requestBody, {
+      axios.post(url, body, {
         headers,
         timeout: 10000, // Short timeout for POST itself
       })
@@ -553,7 +585,7 @@ export class MCPClientService {
               session.messageQueue.delete(requestId);
               logger.error(`[SSE] Response timeout for request ${requestId}`, {
                 serverId,
-                method,
+                path,
                 queueSize: session.messageQueue.size,
               });
               reject(new Error('SSE response timeout'));
@@ -740,11 +772,22 @@ export class MCPClientService {
       this.sseSessions.set(server.id, session);
     }
 
+    // Get execute path from config, default to /tools/{name}
+    let executePath = server.config?.execute_path || '/tools/{name}';
+    if (executePath.includes('{name}')) {
+      executePath = executePath.replace('{name}', toolName);
+    }
+
     // Send tools/call request via session
     try {
-      const response = await this.sendSSEMessage(server.id, 'tools/call', {
-        name: toolName,
-        arguments: args,
+      const response = await this.sendSSEMessage(server.id, executePath, {
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: {
+          name: toolName,
+          arguments: args,
+        },
+        id: Date.now(),
       });
       
       // Extract result
@@ -774,9 +817,14 @@ export class MCPClientService {
       session = await this.createSSESession(server);
       this.sseSessions.set(server.id, session);
       
-      const response = await this.sendSSEMessage(server.id, 'tools/call', {
-        name: toolName,
-        arguments: args,
+      const response = await this.sendSSEMessage(server.id, executePath, {
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: {
+          name: toolName,
+          arguments: args,
+        },
+        id: Date.now(),
       });
       
       if (response.result) {

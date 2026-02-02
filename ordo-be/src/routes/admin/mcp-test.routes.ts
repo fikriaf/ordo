@@ -28,15 +28,14 @@ router.post('/test/:id', async (req: Request, res: Response) => {
     mcpClientService.clearCache(id);
     mcpClientService.clearClients(id);
 
-    // Try to fetch tools
+    // Try to fetch tools from THIS specific server only
     const startTime = Date.now();
     let tools: any[] = [];
     let error: string | null = null;
 
     try {
-      tools = await mcpClientService.getAvailableTools();
-      // Filter to only this server's tools
-      tools = tools.filter((t: any) => t.serverId === id);
+      // Directly test this server, regardless of is_enabled status
+      tools = await (mcpClientService as any).getToolsFromServer(server);
     } catch (err: any) {
       error = err.message;
       logger.error(`MCP test failed for ${server.name}`, {
