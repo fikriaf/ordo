@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { mcpServerService } from '../../services/mcp-server.service';
+import { mcpClientService } from '../../services/mcp-client.service';
 import logger from '../../config/logger';
 
 const router = Router();
@@ -45,6 +46,34 @@ router.get('/', async (_req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to retrieve MCP servers',
+    });
+  }
+});
+
+// Clear MCP tools cache (MUST be before /:id routes)
+router.post('/cache/clear', async (req: Request, res: Response) => {
+  try {
+    const { serverId } = req.body;
+
+    if (serverId) {
+      mcpClientService.clearCache(serverId);
+      mcpClientService.clearClients(serverId);
+    } else {
+      mcpClientService.clearCache();
+      mcpClientService.clearClients();
+    }
+
+    res.json({
+      success: true,
+      message: serverId 
+        ? `Cache cleared for server ${serverId}` 
+        : 'All MCP cache cleared',
+    });
+  } catch (error: any) {
+    logger.error('Error in POST /admin/mcp-servers/cache/clear', { error });
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to clear cache',
     });
   }
 });
