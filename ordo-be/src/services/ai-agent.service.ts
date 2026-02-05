@@ -306,9 +306,9 @@ Always be helpful, concise, and accurate. When users ask to perform blockchain o
 
   async *chatStream(
     userMessage: string,
-    _context: ActionContext,
+    context: ActionContext,
     conversationHistory: Message[] = []
-  ): AsyncGenerator<string, void, unknown> {
+  ): AsyncGenerator<any, void, unknown> {
     try {
       const currentModel = this.getCurrentModel();
       const tools = await this.getAllAvailableTools();
@@ -329,8 +329,10 @@ Always be helpful, concise, and accurate.`,
 
       logger.info('Streaming request to OpenRouter', {
         model: currentModel,
+        toolsAvailable: tools.length,
       });
 
+      // Send initial request
       const response = await axios.post(
         `${this.baseURL}/chat/completions`,
         {
@@ -338,7 +340,7 @@ Always be helpful, concise, and accurate.`,
           messages,
           tools: tools.length > 0 ? tools : undefined,
           tool_choice: 'auto',
-          stream: true,
+          stream: false, // First get tool calls if any
         },
         {
           headers: {
@@ -347,36 +349,155 @@ Always be helpful, concise, and accurate.`,
             'HTTP-Referer': 'https://ordo.app',
             'X-Title': 'Ordo AI Assistant',
           },
-          responseType: 'stream',
-          timeout: 60000, // 60 second timeout for streaming
+          timeout: 30000,
         }
       );
 
-      for await (const chunk of response.data) {
-        const lines = chunk.toString().split('\n').filter((line: string) => line.trim() !== '');
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') {
-              return;
-            }
+      const message = response.data.choices[0].message;
 
-            try {
-              const parsed = JSON.parse(data);
-              const content = parsed.choices[0]?.delta?.content;
-              if (content) {
-                yield content;
+      // Check if there are tool calls
+      if (message.tool_calls && message.tool_calls.length > 0) {
+        // Emit tool call events
+        for (const toolCall of message.tool_calls) {
+          yield {
+            type: 'tool_call',
+            toolId: toolCall.id,
+            toolName: toolCall.function.name,
+            arguments: JSON.parse(toolCall.function.arguments || '{}'),
+          };
+        }
+
+        // Execute tools
+        const toolResults = await this.executeToolCalls(message.tool_calls, context);
+
+        // Emit tool results
+        for (const result of toolResults) {
+          yield {
+            type: 'tool_result',
+            toolId: result.id,
+            toolName: result.name,
+            result: result.result || result.error,
+            error: result.error ? true : false,
+          };
+        }
+
+        // Get final response with tool results
+        const finalMessages = [
+          ...messages,
+          {
+            role: 'assistant' as const,
+            content: message.content || '',
+            tool_calls: message.tool_calls,
+          },
+          ...toolResults.map((result) => ({
+            role: 'tool' as const,
+            tool_call_id: result.id,
+            content: JSON.stringify(result.result || { error: result.error }),
+          })),
+        ];
+
+        // Stream final response
+        const finalResponse = await axios.post(
+          `${this.baseURL}/chat/completions`,
+          {
+            model: currentModel,
+            messages: finalMessages,
+            stream: true,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://ordo.app',
+              'X-Title': 'Ordo AI Assistant',
+            },
+            responseType: 'stream',
+            timeout: 60000,
+          }
+        );
+
+        let buffer = '';
+        for await (const chunk of finalResponse.data) {
+          buffer += chunk.toString();
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') continue;
+              if (!data) continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) {
+                  yield {
+                    type: 'token',
+                    content,
+                  };
+                }
+              } catch (e) {
+                // Skip invalid JSON
               }
-            } catch (e) {
-              // Skip invalid JSON
+            }
+          }
+        }
+      } else {
+        // No tool calls, stream direct response
+        const streamResponse = await axios.post(
+          `${this.baseURL}/chat/completions`,
+          {
+            model: currentModel,
+            messages,
+            stream: true,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.apiKey}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://ordo.app',
+              'X-Title': 'Ordo AI Assistant',
+            },
+            responseType: 'stream',
+            timeout: 60000,
+          }
+        );
+
+        let buffer = '';
+        for await (const chunk of streamResponse.data) {
+          buffer += chunk.toString();
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6).trim();
+              if (data === '[DONE]') continue;
+              if (!data) continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content;
+                if (content) {
+                  yield {
+                    type: 'token',
+                    content,
+                  };
+                }
+              } catch (e) {
+                // Skip invalid JSON
+              }
             }
           }
         }
       }
     } catch (error: any) {
-      logger.error('AI chat stream error:', error.response?.data || error.message);
-      throw new Error(`AI chat stream failed: ${error.message}`);
+      logger.error('Chat stream error:', error);
+      yield {
+        type: 'error',
+        error: error.message || 'Stream failed',
+      };
     }
   }
 }

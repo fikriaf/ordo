@@ -1634,3 +1634,874 @@ LOG_LEVEL=info
 6. **Webhook System:** Allow users to configure webhooks for events
 7. **GraphQL API:** Alternative to REST for flexible queries
 8. **Batch Operations:** Execute multiple actions in a single transaction
+
+## Additional Components (Phase 2)
+
+### 8. EVM Wallet Service
+
+**Responsibilities:**
+- EVM keypair generation and encryption
+- Multi-chain wallet management (Ethereum, Polygon, BSC, Arbitrum, Optimism, Avalanche)
+- EVM balance queries (native and ERC-20 tokens)
+- EVM transaction execution
+
+**Interface:**
+```typescript
+interface EVMWalletService {
+  createWallet(userId: string, chainId: EVMChainId): Promise<EVMWallet>;
+  importWallet(userId: string, chainId: EVMChainId, privateKey: string): Promise<EVMWallet>;
+  getWalletBalance(walletId: string): Promise<EVMBalance>;
+  transferNative(walletId: string, toAddress: string, amount: number): Promise<string>; // Returns tx hash
+  transferToken(walletId: string, toAddress: string, tokenAddress: string, amount: number): Promise<string>;
+  estimateGas(chainId: EVMChainId, type: 'native' | 'token', tokenAddress?: string): Promise<GasEstimate>;
+}
+
+enum EVMChainId {
+  ETHEREUM = 'ethereum',
+  POLYGON = 'polygon',
+  BSC = 'bsc',
+  ARBITRUM = 'arbitrum',
+  OPTIMISM = 'optimism',
+  AVALANCHE = 'avalanche'
+}
+
+interface EVMWallet {
+  id: string;
+  userId: string;
+  chainId: EVMChainId;
+  address: string; // 0x...
+  encryptedPrivateKey: string;
+  encryptionIv: string;
+  encryptionAuthTag: string;
+  isPrimary: boolean;
+  createdAt: Date;
+}
+
+interface EVMBalance {
+  native: number; // ETH, MATIC, BNB, etc.
+  tokens: EVMTokenBalance[];
+}
+
+interface EVMTokenBalance {
+  address: string; // Token contract address
+  symbol: string;
+  name: string;
+  amount: number;
+  decimals: number;
+}
+
+interface GasEstimate {
+  gasLimit: number;
+  gasPrice: string; // in wei
+  estimatedFee: string; // in native token
+  estimatedFeeUsd: number;
+}
+```
+
+**Database Schema:**
+```sql
+CREATE TABLE evm_wallets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  chain_id VARCHAR(50) NOT NULL,
+  address VARCHAR(42) NOT NULL,
+  encrypted_private_key TEXT NOT NULL,
+  encryption_iv VARCHAR(32) NOT NULL,
+  encryption_auth_tag VARCHAR(32) NOT NULL,
+  is_primary BOOLEAN DEFAULT false,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_evm_wallets_user_id ON evm_wallets(user_id);
+CREATE INDEX idx_evm_wallets_address ON evm_wallets(address);
+CREATE INDEX idx_evm_wallets_chain_id ON evm_wallets(chain_id);
+CREATE UNIQUE INDEX idx_evm_wallets_user_address ON evm_wallets(user_id, address);
+```
+
+### 9. User Preferences Service
+
+**Responsibilities:**
+- User preference management
+- Risk threshold configuration
+- Agent autonomy level control
+- Notification preferences
+
+**Interface:**
+```typescript
+interface UserPreferencesService {
+  getPreferences(userId: string): Promise<UserPreferences>;
+  updatePreferences(userId: string, updates: Partial<UserPreferences>): Promise<UserPreferences>;
+  resetToDefaults(userId: string): Promise<UserPreferences>;
+  checkApprovalRequired(userId: string, transactionValue: number): Promise<boolean>;
+}
+
+interface UserPreferences {
+  id: string;
+  userId: string;
+  maxSingleTransferSol: number;
+  maxDailyVolumeUsdc: number;
+  requireApprovalAboveSol: number;
+  autoApproveWhitelisted: boolean;
+  defaultSlippageBps: number;
+  maxSlippageBps: number;
+  priorityFeeLamports: number;
+  agentAutonomyLevel: 'low' | 'medium' | 'high';
+  enableAutoStaking: boolean;
+  enableAutoCompounding: boolean;
+  notificationChannels: string[];
+  alertOnLargeMovements: boolean;
+  alertThresholdUsdc: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+**Database Schema:**
+```sql
+CREATE TABLE user_preferences (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+  max_single_transfer_sol DECIMAL(18, 9) DEFAULT 1.0,
+  max_daily_volume_usdc DECIMAL(18, 2) DEFAULT 10000,
+  require_approval_above_sol DECIMAL(18, 9) DEFAULT 0.5,
+  auto_approve_whitelisted BOOLEAN DEFAULT false,
+  default_slippage_bps INTEGER DEFAULT 50,
+  max_slippage_bps INTEGER DEFAULT 300,
+  priority_fee_lamports INTEGER DEFAULT 10000,
+  agent_autonomy_level VARCHAR(20) DEFAULT 'medium',
+  enable_auto_staking BOOLEAN DEFAULT false,
+  enable_auto_compounding BOOLEAN DEFAULT false,
+  notification_channels JSONB DEFAULT '["mobile"]',
+  alert_on_large_movements BOOLEAN DEFAULT true,
+  alert_threshold_usdc DECIMAL(18, 2) DEFAULT 1000,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id);
+```
+
+### 10. Approval Service
+
+**Responsibilities:**
+- Approval request creation and management
+- Approval/rejection workflow
+- Expiration handling
+- Alternative options generation
+
+**Interface:**
+```typescript
+interface ApprovalService {
+  createApprovalRequest(request: ApprovalRequestInput): Promise<ApprovalRequest>;
+  getApprovalRequest(id: string): Promise<ApprovalRequest>;
+  getPendingApprovals(userId: string): Promise<ApprovalRequest[]>;
+  getApprovalHistory(userId: string, filters: ApprovalFilters): Promise<PaginatedResult<ApprovalRequest>>;
+  approveRequest(id: string, userId: string): Promise<ApprovalRequest>;
+  rejectRequest(id: string, userId: string, reason?: string): Promise<ApprovalRequest>;
+  expireOldRequests(): Promise<void>; // Background job
+}
+
+interface ApprovalRequestInput {
+  userId: string;
+  requestType: 'transaction' | 'setting_change' | 'large_transfer' | 'high_risk_token';
+  pendingTransaction: any;
+  estimatedRiskScore?: number;
+  estimatedUsdValue?: number;
+  agentReasoning: string;
+  limitingFactors?: any;
+  alternativeOptions?: any;
+  expiresAt?: Date;
+}
+
+interface ApprovalRequest {
+  id: string;
+  userId: string;
+  requestType: string;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  pendingTransaction: any;
+  estimatedRiskScore?: number;
+  estimatedUsdValue?: number;
+  agentReasoning: string;
+  limitingFactors?: any;
+  alternativeOptions?: any;
+  approvedAt?: Date;
+  rejectedAt?: Date;
+  rejectionReason?: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+interface ApprovalFilters {
+  status?: string;
+  requestType?: string;
+  startDate?: Date;
+  endDate?: Date;
+  page: number;
+  limit: number;
+}
+```
+
+**Database Schema:**
+```sql
+CREATE TABLE approval_queue (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  request_type VARCHAR(50) NOT NULL,
+  status VARCHAR(20) DEFAULT 'pending',
+  pending_transaction JSONB NOT NULL,
+  estimated_risk_score DECIMAL(5, 2),
+  estimated_usd_value DECIMAL(18, 2),
+  agent_reasoning TEXT NOT NULL,
+  limiting_factors JSONB,
+  alternative_options JSONB,
+  approved_at TIMESTAMP,
+  rejected_at TIMESTAMP,
+  rejection_reason TEXT,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_approval_queue_user_id ON approval_queue(user_id);
+CREATE INDEX idx_approval_queue_status ON approval_queue(status);
+CREATE INDEX idx_approval_queue_expires_at ON approval_queue(expires_at);
+```
+
+### 11. Token Risk Service
+
+**Responsibilities:**
+- Token risk score fetching and caching
+- Range Protocol integration
+- Risk analysis and recommendations
+
+**Interface:**
+```typescript
+interface TokenRiskService {
+  getTokenRiskScore(tokenAddress: string): Promise<TokenScore>;
+  analyzeToken(tokenAddress: string): Promise<TokenAnalysis>;
+  searchTokens(query: string, limit: number): Promise<TokenScore[]>;
+  getRiskyTokens(limit: number): Promise<TokenScore[]>;
+  refreshTokenScores(): Promise<void>; // Background job
+}
+
+interface TokenScore {
+  id: string;
+  tokenAddress: string;
+  tokenSymbol: string;
+  tokenName: string;
+  riskScore: number; // 0-100, lower is better
+  marketScore: number; // 0-100, higher is better
+  liquidityScore: number;
+  holderScore: number;
+  rugcheckScore: number;
+  priceUsd: number;
+  marketCapUsd: number;
+  volume24hUsd: number;
+  liquidityUsd: number;
+  holderCount: number;
+  limitingFactors: any;
+  dataSources: string[];
+  createdAt: Date;
+  updatedAt: Date;
+  lastFetchedAt: Date;
+}
+
+interface TokenAnalysis {
+  score: TokenScore;
+  recommendation: 'safe' | 'caution' | 'high_risk';
+  reasons: string[];
+}
+```
+
+**Database Schema:**
+```sql
+CREATE TABLE token_scores (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  token_address VARCHAR(44) UNIQUE NOT NULL,
+  token_symbol VARCHAR(20),
+  token_name VARCHAR(100),
+  risk_score DECIMAL(5, 2),
+  market_score DECIMAL(5, 2),
+  liquidity_score DECIMAL(5, 2),
+  holder_score DECIMAL(5, 2),
+  rugcheck_score DECIMAL(5, 2),
+  price_usd DECIMAL(18, 8),
+  market_cap_usd DECIMAL(20, 2),
+  volume_24h_usd DECIMAL(20, 2),
+  liquidity_usd DECIMAL(20, 2),
+  holder_count INTEGER,
+  limiting_factors JSONB,
+  data_sources JSONB,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  last_fetched_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_token_scores_address ON token_scores(token_address);
+CREATE INDEX idx_token_scores_risk_score ON token_scores(risk_score);
+CREATE INDEX idx_token_scores_symbol ON token_scores(token_symbol);
+```
+
+### 12. Helius Analytics Service
+
+**Responsibilities:**
+- Enhanced transaction data from Helius
+- Token and NFT metadata
+- Address activity analysis
+
+**Interface:**
+```typescript
+interface HeliusService {
+  getEnhancedTransactions(address: string, limit: number): Promise<EnhancedTransaction[]>;
+  getParsedTransaction(signature: string): Promise<ParsedTransaction>;
+  getTokenMetadata(mintAddress: string): Promise<TokenMetadata>;
+  getNFTsByOwner(address: string, limit: number): Promise<NFTAsset[]>;
+  getTokenBalances(address: string): Promise<TokenBalanceWithMetadata[]>;
+  searchAssets(query: string, limit: number): Promise<Asset[]>;
+  getAddressActivity(address: string): Promise<AddressActivity>;
+}
+
+interface EnhancedTransaction {
+  signature: string;
+  timestamp: number;
+  type: string;
+  source: string;
+  fee: number;
+  feePayer: string;
+  nativeTransfers: NativeTransfer[];
+  tokenTransfers: TokenTransfer[];
+  events: any;
+}
+
+interface TokenMetadata {
+  account: string;
+  onChainMetadata: any;
+  offChainMetadata: any;
+}
+
+interface NFTAsset {
+  id: string;
+  content: {
+    metadata: {
+      name: string;
+      symbol: string;
+      description: string;
+      image: string;
+    };
+  };
+  ownership: {
+    owner: string;
+    delegated: boolean;
+  };
+  creators: any[];
+  royalty: any;
+}
+
+interface AddressActivity {
+  totalTransactions: number;
+  types: Record<string, number>;
+  recentActivity: EnhancedTransaction[];
+  firstSeen: number;
+  lastSeen: number;
+}
+```
+
+### 13. Realtime Service
+
+**Responsibilities:**
+- WebSocket connection management
+- Real-time event broadcasting
+- Subscription management
+
+**Interface:**
+```typescript
+interface RealtimeService {
+  initialize(server: http.Server): void;
+  authenticateConnection(socket: Socket, token: string): Promise<User>;
+  subscribeToTransactions(userId: string, socket: Socket): void;
+  subscribeToApprovals(userId: string, socket: Socket): void;
+  subscribeToPortfolio(userId: string, socket: Socket): void;
+  broadcastTransactionUpdate(userId: string, transaction: Transaction): void;
+  broadcastApprovalNotification(userId: string, approval: ApprovalRequest): void;
+  broadcastPortfolioUpdate(userId: string, portfolio: any): void;
+}
+
+// WebSocket Events
+interface WebSocketEvents {
+  // Client -> Server
+  'authenticate': (token: string) => void;
+  'subscribe:transactions': () => void;
+  'subscribe:approvals': () => void;
+  'subscribe:portfolio': () => void;
+  
+  // Server -> Client
+  'authenticated': (user: User) => void;
+  'transaction:update': (transaction: Transaction) => void;
+  'approval:created': (approval: ApprovalRequest) => void;
+  'approval:processed': (approval: ApprovalRequest) => void;
+  'portfolio:update': (portfolio: any) => void;
+  'error': (error: { code: string; message: string }) => void;
+}
+```
+
+### API Endpoints (Additional)
+
+**EVM Wallet:**
+- `POST /api/v1/wallet/evm/create` - Create EVM wallet
+- `POST /api/v1/wallet/evm/import` - Import EVM wallet
+- `GET /api/v1/wallet/evm/:id/balance` - Get EVM balance
+- `GET /api/v1/wallets/evm` - List user's EVM wallets
+- `POST /api/v1/wallet/evm/transfer/native` - Transfer native token
+- `POST /api/v1/wallet/evm/transfer/token` - Transfer ERC-20 token
+- `GET /api/v1/wallet/evm/gas-estimate` - Estimate gas fee
+
+**User Preferences:**
+- `GET /api/v1/preferences` - Get user preferences
+- `PUT /api/v1/preferences` - Update preferences
+- `POST /api/v1/preferences/reset` - Reset to defaults
+
+**Approval Queue:**
+- `GET /api/v1/approvals/pending` - Get pending approvals
+- `GET /api/v1/approvals/:id` - Get approval details
+- `POST /api/v1/approvals/:id/approve` - Approve request
+- `POST /api/v1/approvals/:id/reject` - Reject request
+- `GET /api/v1/approvals/history` - Get approval history
+
+**Token Risk:**
+- `GET /api/v1/tokens/:address/risk` - Get token risk score
+- `POST /api/v1/tokens/:address/analyze` - Analyze token
+- `GET /api/v1/tokens/search` - Search tokens
+- `GET /api/v1/tokens/risky` - Get risky tokens
+
+**Analytics (Helius):**
+- `GET /api/v1/analytics/transactions/:address` - Enhanced transactions
+- `GET /api/v1/analytics/transaction/:signature` - Parsed transaction
+- `GET /api/v1/analytics/token/:mintAddress` - Token metadata
+- `GET /api/v1/analytics/nfts/:address` - NFTs by owner
+- `GET /api/v1/analytics/balances/:address` - Token balances with metadata
+- `GET /api/v1/analytics/search` - Search assets
+- `GET /api/v1/analytics/activity/:address` - Address activity
+
+**NFT Management:**
+- `POST /api/v1/nft/mint` - Mint NFT
+- `POST /api/v1/nft/transfer` - Transfer NFT
+- `POST /api/v1/nft/burn` - Burn NFT
+- `GET /api/v1/nft/user` - Get user's NFTs
+- `GET /api/v1/nft/wallet/:address` - Get NFTs by wallet
+- `GET /api/v1/nft/metadata/:mintAddress` - Get NFT metadata
+- `GET /api/v1/nft/collection/:address` - Get collection info
+- `GET /api/v1/nft/portfolio/value` - Get portfolio value
+
+**Staking:**
+- `POST /api/v1/stake` - Stake tokens
+- `POST /api/v1/stake/unstake` - Unstake tokens
+- `GET /api/v1/stake/positions` - Get staking positions
+- `GET /api/v1/stake/rewards` - Get staking rewards
+- `GET /api/v1/stake/apy` - Get APY rates
+
+**Lending:**
+- `POST /api/v1/lend` - Lend assets
+- `POST /api/v1/lend/borrow` - Borrow assets
+- `POST /api/v1/lend/repay` - Repay loan
+- `POST /api/v1/lend/withdraw` - Withdraw lent assets
+- `GET /api/v1/lend/positions` - Get lending positions
+- `GET /api/v1/lend/rates` - Get interest rates
+
+**Token Transfer:**
+- `POST /api/v1/transfer/sol` - Transfer SOL
+- `POST /api/v1/transfer/token` - Transfer SPL token
+- `GET /api/v1/transfer/fee` - Estimate transfer fee
+- `POST /api/v1/transfer/validate` - Validate transfer
+
+**Token Swap (Jupiter):**
+- `GET /api/v1/swap/quote` - Get swap quote
+- `POST /api/v1/swap/execute` - Execute swap
+- `GET /api/v1/swap/price/:tokenMint` - Get token price
+- `GET /api/v1/swap/tokens` - Get supported tokens
+- `POST /api/v1/swap/validate` - Validate swap
+
+**Admin - EVM Wallets:**
+- `GET /api/v1/admin/wallets/evm` - List all EVM wallets
+
+### 14. Agent Memory Service
+
+**Responsibilities:**
+- Long-term memory storage with vector embeddings
+- Semantic memory retrieval
+- Learned preferences tracking
+- Decision logging
+
+**Interface:**
+```typescript
+interface AgentMemoryService {
+  storeMemory(memory: MemoryInput): Promise<AgentMemory>;
+  searchMemories(userId: string, query: string, limit: number): Promise<AgentMemory[]>;
+  getRecentMemories(userId: string, limit: number): Promise<AgentMemory[]>;
+  updateImportanceScore(memoryId: string, score: number): Promise<void>;
+  deleteMemory(memoryId: string): Promise<void>;
+}
+
+interface MemoryInput {
+  userId: string;
+  memoryType: 'preference' | 'decision' | 'insight' | 'context';
+  content: string;
+  agentId?: string;
+  importanceScore?: number;
+  metadata?: any;
+}
+
+interface AgentMemory {
+  id: string;
+  userId: string;
+  memoryType: string;
+  content: string;
+  embedding: number[]; // Vector embedding (1536 dimensions for OpenAI)
+  agentId?: string;
+  importanceScore: number;
+  metadata?: any;
+  createdAt: Date;
+  lastAccessedAt: Date;
+}
+```
+
+**Database Schema:**
+```sql
+CREATE TABLE agent_memories (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  memory_type VARCHAR(50) NOT NULL,
+  content TEXT NOT NULL,
+  embedding vector(1536), -- pgvector extension
+  agent_id VARCHAR(100),
+  importance_score DECIMAL(3, 2) DEFAULT 0.5,
+  metadata JSONB,
+  created_at TIMESTAMP DEFAULT NOW(),
+  last_accessed_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_agent_memories_user_id ON agent_memories(user_id);
+CREATE INDEX idx_agent_memories_type ON agent_memories(memory_type);
+CREATE INDEX idx_agent_memories_embedding ON agent_memories USING ivfflat (embedding vector_cosine_ops);
+```
+
+**Vector Search:**
+- Use pgvector extension for PostgreSQL
+- Cosine similarity for semantic search
+- Index with IVFFlat for performance
+
+### 15. Portfolio Analytics Service
+
+**Responsibilities:**
+- Multi-chain portfolio aggregation
+- Market data integration (Birdeye)
+- Portfolio valuation and tracking
+- Performance analytics
+
+**Interface:**
+```typescript
+interface PortfolioService {
+  getPortfolioSummary(userId: string): Promise<PortfolioSummary>;
+  getTokenAnalytics(tokenAddress: string): Promise<TokenAnalytics>;
+  getTrendingTokens(limit: number): Promise<TrendingToken[]>;
+  getPriceHistory(tokenAddress: string, timeframe: string): Promise<PricePoint[]>;
+  getPortfolioPerformance(userId: string, timeframe: string): Promise<PerformanceMetrics>;
+}
+
+interface PortfolioSummary {
+  totalValueUsd: number;
+  solanaValueUsd: number;
+  evmValueUsd: number;
+  tokens: PortfolioToken[];
+  nfts: PortfolioNFT[];
+  defiPositions: DeFiPosition[];
+  change24h: number;
+  change7d: number;
+}
+
+interface TokenAnalytics {
+  address: string;
+  symbol: string;
+  name: string;
+  priceUsd: number;
+  priceChange24h: number;
+  volume24h: number;
+  marketCap: number;
+  liquidity: number;
+  holders: number;
+  priceHistory: PricePoint[];
+}
+
+interface TrendingToken {
+  address: string;
+  symbol: string;
+  name: string;
+  priceUsd: number;
+  priceChange24h: number;
+  volume24h: number;
+  volumeChange24h: number;
+}
+
+interface PerformanceMetrics {
+  totalReturn: number;
+  totalReturnPercentage: number;
+  bestPerformer: { symbol: string; return: number };
+  worstPerformer: { symbol: string; return: number };
+  realizedGains: number;
+  unrealizedGains: number;
+}
+```
+
+### 16. Birdeye Integration Service
+
+**Responsibilities:**
+- Market data fetching
+- Token analytics
+- Price feeds
+- Trending tokens
+
+**Interface:**
+```typescript
+interface BirdeyeService {
+  getTokenPrice(address: string): Promise<number>;
+  getTokenOverview(address: string): Promise<TokenOverview>;
+  getTokenMarketData(address: string): Promise<MarketData>;
+  getTrendingTokens(limit: number): Promise<TrendingToken[]>;
+  getPriceHistory(address: string, timeframe: string): Promise<PricePoint[]>;
+}
+
+interface TokenOverview {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  price: number;
+  priceChange24h: number;
+  volume24h: number;
+  marketCap: number;
+  liquidity: number;
+  holders: number;
+}
+
+interface MarketData {
+  price: number;
+  volume24h: number;
+  volumeChange24h: number;
+  marketCap: number;
+  marketCapChange24h: number;
+  liquidity: number;
+  liquidityChange24h: number;
+  priceHigh24h: number;
+  priceLow24h: number;
+}
+```
+
+### 17. Webhook Service
+
+**Responsibilities:**
+- Webhook configuration management
+- Event notification delivery
+- Retry logic with exponential backoff
+- Signature verification
+
+**Interface:**
+```typescript
+interface WebhookService {
+  createWebhook(webhook: WebhookInput): Promise<Webhook>;
+  updateWebhook(id: string, updates: Partial<WebhookInput>): Promise<Webhook>;
+  deleteWebhook(id: string): Promise<void>;
+  getUserWebhooks(userId: string): Promise<Webhook[]>;
+  sendWebhook(userId: string, event: WebhookEvent): Promise<void>;
+  retryFailedWebhooks(): Promise<void>; // Background job
+}
+
+interface WebhookInput {
+  userId: string;
+  url: string;
+  events: WebhookEventType[];
+  secret?: string;
+  isEnabled: boolean;
+}
+
+interface Webhook {
+  id: string;
+  userId: string;
+  url: string;
+  events: WebhookEventType[];
+  secret: string;
+  isEnabled: boolean;
+  lastTriggeredAt?: Date;
+  failureCount: number;
+  createdAt: Date;
+}
+
+enum WebhookEventType {
+  TRANSACTION_CONFIRMED = 'transaction.confirmed',
+  TRANSACTION_FAILED = 'transaction.failed',
+  APPROVAL_REQUIRED = 'approval.required',
+  APPROVAL_PROCESSED = 'approval.processed',
+  BALANCE_CHANGED = 'balance.changed',
+  PRICE_ALERT = 'price.alert'
+}
+
+interface WebhookEvent {
+  type: WebhookEventType;
+  data: any;
+  timestamp: Date;
+}
+```
+
+**Database Schema:**
+```sql
+CREATE TABLE webhooks (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  url TEXT NOT NULL,
+  events JSONB NOT NULL,
+  secret VARCHAR(255),
+  is_enabled BOOLEAN DEFAULT true,
+  last_triggered_at TIMESTAMP,
+  failure_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_webhooks_user_id ON webhooks(user_id);
+CREATE INDEX idx_webhooks_enabled ON webhooks(is_enabled);
+
+CREATE TABLE webhook_deliveries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  webhook_id UUID NOT NULL REFERENCES webhooks(id) ON DELETE CASCADE,
+  event_type VARCHAR(50) NOT NULL,
+  payload JSONB NOT NULL,
+  status VARCHAR(20) NOT NULL, -- pending, success, failed
+  response_code INTEGER,
+  response_body TEXT,
+  attempt_count INTEGER DEFAULT 1,
+  created_at TIMESTAMP DEFAULT NOW(),
+  delivered_at TIMESTAMP
+);
+
+CREATE INDEX idx_webhook_deliveries_webhook_id ON webhook_deliveries(webhook_id);
+CREATE INDEX idx_webhook_deliveries_status ON webhook_deliveries(status);
+```
+
+### 18. Liquidity Pool Service
+
+**Responsibilities:**
+- Add/remove liquidity operations
+- LP position tracking
+- Impermanent loss calculation
+- Multi-DEX support (Raydium, Meteora, Orca)
+
+**Interface:**
+```typescript
+interface LiquidityService {
+  addLiquidity(params: AddLiquidityParams): Promise<string>; // Returns signature
+  removeLiquidity(params: RemoveLiquidityParams): Promise<string>;
+  getLPPositions(userId: string): Promise<LPPosition[]>;
+  getLPPositionValue(positionId: string): Promise<LPPositionValue>;
+  calculateImpermanentLoss(positionId: string): Promise<ImpermanentLossData>;
+}
+
+interface AddLiquidityParams {
+  walletId: string;
+  protocol: 'raydium' | 'meteora' | 'orca';
+  tokenA: string;
+  tokenB: string;
+  amountA: number;
+  amountB: number;
+  slippageBps: number;
+}
+
+interface RemoveLiquidityParams {
+  walletId: string;
+  protocol: 'raydium' | 'meteora' | 'orca';
+  lpTokenMint: string;
+  amount: number;
+  slippageBps: number;
+}
+
+interface LPPosition {
+  id: string;
+  userId: string;
+  protocol: string;
+  poolAddress: string;
+  tokenA: string;
+  tokenB: string;
+  lpTokenMint: string;
+  lpTokenAmount: number;
+  initialValueUsd: number;
+  createdAt: Date;
+}
+
+interface LPPositionValue {
+  currentValueUsd: number;
+  tokenAAmount: number;
+  tokenBAmount: number;
+  feesEarnedUsd: number;
+  impermanentLoss: number;
+  totalReturn: number;
+}
+
+interface ImpermanentLossData {
+  impermanentLossPercentage: number;
+  impermanentLossUsd: number;
+  hodlValue: number;
+  lpValue: number;
+  feesEarned: number;
+  netReturn: number;
+}
+```
+
+**Database Schema:**
+```sql
+CREATE TABLE lp_positions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  wallet_id UUID NOT NULL REFERENCES wallets(id),
+  protocol VARCHAR(50) NOT NULL,
+  pool_address VARCHAR(44) NOT NULL,
+  token_a VARCHAR(44) NOT NULL,
+  token_b VARCHAR(44) NOT NULL,
+  lp_token_mint VARCHAR(44) NOT NULL,
+  lp_token_amount DECIMAL(18, 9) NOT NULL,
+  initial_value_usd DECIMAL(18, 2),
+  initial_token_a_amount DECIMAL(18, 9),
+  initial_token_b_amount DECIMAL(18, 9),
+  status VARCHAR(20) DEFAULT 'active', -- active, closed
+  created_at TIMESTAMP DEFAULT NOW(),
+  closed_at TIMESTAMP
+);
+
+CREATE INDEX idx_lp_positions_user_id ON lp_positions(user_id);
+CREATE INDEX idx_lp_positions_status ON lp_positions(status);
+```
+
+### API Endpoints (Additional - Phase 3 Continued)
+
+**Agent Memory:**
+- `POST /api/v1/memory/store` - Store memory
+- `POST /api/v1/memory/search` - Semantic search
+- `GET /api/v1/memory/recent` - Recent memories
+- `DELETE /api/v1/memory/:id` - Delete memory
+
+**Portfolio Analytics:**
+- `GET /api/v1/portfolio/summary` - Portfolio summary
+- `GET /api/v1/portfolio/performance` - Performance metrics
+- `GET /api/v1/analytics/token/:address` - Token analytics
+- `GET /api/v1/market/trending` - Trending tokens
+- `GET /api/v1/price/:address/history` - Price history
+
+**Webhooks:**
+- `POST /api/v1/webhooks` - Create webhook
+- `GET /api/v1/webhooks` - List webhooks
+- `PUT /api/v1/webhooks/:id` - Update webhook
+- `DELETE /api/v1/webhooks/:id` - Delete webhook
+- `POST /api/v1/webhooks/:id/test` - Test webhook
+
+**Liquidity Pools:**
+- `POST /api/v1/liquidity/add` - Add liquidity
+- `POST /api/v1/liquidity/remove` - Remove liquidity
+- `GET /api/v1/liquidity/positions` - Get LP positions
+- `GET /api/v1/liquidity/position/:id/value` - Get position value
+- `GET /api/v1/liquidity/position/:id/il` - Calculate impermanent loss

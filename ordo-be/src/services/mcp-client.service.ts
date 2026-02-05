@@ -208,7 +208,8 @@ export class MCPClientService {
 
   /**
    * Fetch tools from SSE-based MCP server
-   * SSE servers use /sse for session, then POST to /tools via session endpoint
+   * CRITICAL: For Daemon Intel MCP, use GET /tools endpoint (no SSE needed for listing!)
+   * SSE is only needed for tool execution, not for listing tools
    */
   private async fetchToolsSSE(server: MCPServer): Promise<MCPTool[]> {
     logger.info(`[SSE] Starting fetchToolsSSE for ${server.name}`, {
@@ -216,6 +217,70 @@ export class MCPClientService {
       url: server.server_url,
     });
 
+    // CRITICAL: Check if server has a dedicated /tools endpoint (like Daemon Intel)
+    // If yes, use HTTP GET instead of SSE for listing tools
+    const toolsPath = server.config?.tools_path || '/tools';
+    
+    // Try HTTP GET first for tools listing (Daemon Intel pattern)
+    try {
+      logger.info(`[SSE] Trying HTTP GET ${toolsPath} for ${server.name}`);
+      
+      const url = `${server.server_url}${toolsPath}`;
+      const protocol = url.startsWith('https') ? https : http;
+      
+      const response = await new Promise<any>((resolve, reject) => {
+        const req = protocol.request(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            ...server.headers,
+          },
+        }, (res) => {
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
+          res.on('end', () => {
+            try {
+              const parsed = JSON.parse(data);
+              resolve(parsed);
+            } catch (e) {
+              reject(new Error(`Failed to parse tools response: ${e}`));
+            }
+          });
+        });
+        
+        req.on('error', reject);
+        req.setTimeout(10000, () => {
+          req.destroy();
+          reject(new Error('Request timeout'));
+        });
+        req.end();
+      });
+      
+      // Parse response - could be array or object with tools property
+      let tools: MCPTool[] = [];
+      if (Array.isArray(response)) {
+        tools = response;
+      } else if (response.tools && Array.isArray(response.tools)) {
+        tools = response.tools;
+      } else if (response.result?.tools && Array.isArray(response.result.tools)) {
+        tools = response.result.tools;
+      }
+      
+      if (tools.length > 0) {
+        logger.info(`[SSE] Successfully fetched ${tools.length} tools via HTTP GET for ${server.name}`);
+        return tools;
+      }
+      
+      logger.info(`[SSE] HTTP GET returned no tools, falling back to SSE method for ${server.name}`);
+    } catch (error: any) {
+      logger.info(`[SSE] HTTP GET failed (${error.message}), falling back to SSE method for ${server.name}`);
+    }
+
+    // Fallback: Use SSE method for servers that require it (like Fetch MCP)
+    logger.info(`[SSE] Using SSE method for ${server.name}`);
+    
     // Check if we already have a session
     let session = this.sseSessions.get(server.id);
     
@@ -225,16 +290,18 @@ export class MCPClientService {
       session = await this.createSSESession(server);
       this.sseSessions.set(server.id, session);
       logger.info(`[SSE] Session created successfully for ${server.name}`);
+      
+      // CRITICAL: Wait for stream to be fully ready before sending requests
+      // Intel API needs time to set up stream reference
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      logger.info(`[SSE] Session stabilized for ${server.name}`);
     } else {
       logger.info(`[SSE] Using existing session for ${server.name}`);
     }
 
-    // Get tools path from config, default to /tools
-    const toolsPath = server.config?.tools_path || '/tools';
-
-    // Send request to list tools
+    // Send request to list tools via SSE
     try {
-      logger.info(`[SSE] Sending request to ${toolsPath} for ${server.name}`);
+      logger.info(`[SSE] Sending tools/list request via SSE for ${server.name}`);
       const response = await this.sendSSEMessage(server.id, toolsPath, {
         jsonrpc: '2.0',
         method: 'tools/list',
@@ -261,49 +328,62 @@ export class MCPClientService {
       });
       return [];
     } catch (error: any) {
-      // If session failed, try to recreate ONCE
-      logger.warn(`[SSE] Session failed for ${server.name}, recreating...`, {
+      // CRITICAL: DON'T close session on error! Session must stay alive!
+      // Only log the error and try to recreate session if it's a connection error
+      logger.error(`[SSE] Request failed for ${server.name}`, {
         serverId: server.id,
         error: error.message,
       });
       
-      this.closeSSESession(server.id);
-      
-      try {
-        session = await this.createSSESession(server);
-        this.sseSessions.set(server.id, session);
+      // Check if it's a connection error (stream ended/closed)
+      if (error.message.includes('stream ended') || error.message.includes('stream closed') || error.message.includes('stream error')) {
+        logger.warn(`[SSE] Connection error detected, recreating session for ${server.name}`);
+        this.closeSSESession(server.id);
         
-        const response = await this.sendSSEMessage(server.id, toolsPath, {
-          jsonrpc: '2.0',
-          method: 'tools/list',
-          params: {},
-          id: Date.now(),
-        });
-        
-        if (response.result?.tools) {
-          return response.result.tools;
-        } else if (response.tools) {
-          return response.tools;
+        try {
+          session = await this.createSSESession(server);
+          this.sseSessions.set(server.id, session);
+          
+          // CRITICAL: Wait for stream to be fully ready
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          logger.info(`[SSE] Session recreated and stabilized for ${server.name}`);
+          
+          const response = await this.sendSSEMessage(server.id, toolsPath, {
+            jsonrpc: '2.0',
+            method: 'tools/list',
+            params: {},
+            id: Date.now(),
+          });
+          
+          if (response.result?.tools) {
+            return response.result.tools;
+          } else if (response.tools) {
+            return response.tools;
+          }
+          
+          return [];
+        } catch (retryError: any) {
+          logger.error(`[SSE] Retry failed for ${server.name}`, {
+            serverId: server.id,
+            error: retryError.message,
+          });
+          throw retryError;
         }
-        
-        return [];
-      } catch (retryError: any) {
-        logger.error(`[SSE] Retry failed for ${server.name}`, {
-          serverId: server.id,
-          error: retryError.message,
-        });
-        throw retryError;
+      } else {
+        // Not a connection error - just throw it
+        // DON'T close the session!
+        throw error;
       }
     }
   }
 
   /**
    * Create SSE session with MCP server using native Node.js HTTP
-   * SSE endpoint is always /sse for session establishment
+   * CRITICAL: Connection must stay open for session to persist!
+   * CRITICAL: Do NOT destroy the stream - keep it alive!
    */
   private async createSSESession(server: MCPServer): Promise<SSESession> {
     return new Promise((resolve, reject) => {
-      // SSE endpoint is always /sse for establishing session
       const sseEndpoint = '/sse';
       const url = new URL(`${server.server_url}${sseEndpoint}`);
       const timeout = server.config?.timeout || 30000;
@@ -337,6 +417,8 @@ export class MCPClientService {
         path: url.pathname + url.search,
         method: 'GET',
         headers,
+        // CRITICAL: Keep connection alive - don't use agent pooling
+        agent: false,
       };
 
       req = protocol.request(options, (res) => {
@@ -359,10 +441,8 @@ export class MCPClientService {
 
         res.setEncoding('utf8');
         
-        // Prevent stream from auto-closing
-        res.pause();
-        res.resume();
-
+        // CRITICAL: Keep stream flowing - don't let it pause
+        // CRITICAL: Don't call res.pause() or res.destroy()!
         res.on('data', (chunk: string) => {
           buffer += chunk;
           const lines = buffer.split('\n');
@@ -388,9 +468,10 @@ export class MCPClientService {
                     serverId: server.id,
                   });
                   
-                  // Resolve with session - stream continues listening
+                  // Resolve with session - stream MUST continue listening!
                   if (!isResolved) {
                     isResolved = true;
+                    // Return session object but keep stream alive
                     resolve({
                       sessionEndpoint,
                       stream: res,
@@ -531,13 +612,18 @@ export class MCPClientService {
         }
       }, timeout);
 
+      // CRITICAL: Don't end the request - keep it open!
+      // CRITICAL: Don't call req.end() with a callback that destroys it!
       req.end();
+      
+      // CRITICAL: Keep the request object alive - don't let it be garbage collected
+      (req as any).keepAlive = true;
     });
   }
 
   /**
    * Send message via SSE session and wait for response
-   * POST to session endpoint with JSON-RPC body
+   * Response can come via POST body (Intel API) or SSE stream (standard MCP)
    */
   private async sendSSEMessage(
     serverId: string,
@@ -568,7 +654,7 @@ export class MCPClientService {
         queueSize: session.messageQueue.size,
       });
 
-      // Register response handler BEFORE sending request
+      // Register response handler for SSE stream response
       session.messageQueue.set(requestId, { resolve, reject });
 
       const headers: Record<string, string> = {
@@ -580,70 +666,188 @@ export class MCPClientService {
         headers['Authorization'] = `Bearer ${server.api_key}`;
       }
 
-      logger.debug(`[SSE] Request body:`, {
+      // Use native HTTP for POST - use URL string directly like in test file
+      const postBody = JSON.stringify(body);
+
+      logger.info(`[SSE] Request details:`, {
         serverId,
         requestId,
-        body: JSON.stringify(body),
+        body: postBody,
+        url,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postBody),
+        },
       });
 
-      // Send POST request to session endpoint
-      axios.post(url, body, {
-        headers,
-        timeout: 10000,
-      })
-        .then(response => {
-          logger.info(`[SSE] POST accepted, waiting for SSE response...`, {
+      // CRITICAL: Use URL string directly, not parsed URL object
+      // CRITICAL: Don't include extra headers - keep it minimal like test file
+      const postProtocol = url.startsWith('https') ? https : http;
+      
+      const postReq = postProtocol.request(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postBody),
+          // DON'T include server headers here - might interfere
+        },
+        agent: false,
+      }, (postRes) => {
+        let responseData = '';
+        
+        postRes.on('data', (chunk) => {
+          responseData += chunk;
+        });
+
+        postRes.on('end', () => {
+          logger.info(`[SSE] POST response received`, {
             serverId,
             requestId,
-            status: response.status,
-            data: response.data,
-            queueSize: session.messageQueue.size,
+            status: postRes.statusCode,
+            hasData: !!responseData,
+            dataPreview: responseData.substring(0, 200),
           });
           
-          // Response will come via SSE stream
-          const responseTimeout = setTimeout(() => {
-            if (session.messageQueue.has(requestId)) {
-              session.messageQueue.delete(requestId);
-              logger.error(`[SSE] Response timeout for request ${requestId}`, {
-                serverId,
-                path,
-                queueSize: session.messageQueue.size,
-              });
-              reject(new Error('SSE response timeout'));
-            }
-          }, timeout);
+          // Handle error status codes first (before parsing)
+          if (postRes.statusCode && postRes.statusCode >= 400) {
+            session.messageQueue.delete(requestId);
+            logger.error(`[SSE] POST failed with status ${postRes.statusCode}`, {
+              serverId,
+              requestId,
+              data: responseData,
+            });
+            reject(new Error(`POST failed: ${postRes.statusCode} - ${responseData}`));
+            return;
+          }
+          
+          // Try to parse response as JSON
+          let parsedData = null;
+          try {
+            parsedData = responseData ? JSON.parse(responseData) : null;
+          } catch (parseError: any) {
+            // Not JSON - might be plain text or empty
+            logger.debug(`[SSE] Response is not JSON`, {
+              serverId,
+              requestId,
+              data: responseData.substring(0, 100),
+            });
+          }
+          
+          // Check if response came directly in POST body (Intel API pattern)
+          if (postRes.statusCode === 200 && parsedData) {
+            // Response in POST body - resolve immediately
+            session.messageQueue.delete(requestId);
+            logger.info(`[SSE] Response received in POST body (hybrid mode)`, {
+              serverId,
+              requestId,
+            });
+            resolve(parsedData);
+          } else if (postRes.statusCode === 202) {
+            // 202 Accepted - response will come via SSE stream
+            logger.info(`[SSE] POST accepted, waiting for SSE response...`, {
+              serverId,
+              requestId,
+              queueSize: session.messageQueue.size,
+            });
+            
+            // Set timeout for SSE response
+            const responseTimeout = setTimeout(() => {
+              if (session.messageQueue.has(requestId)) {
+                session.messageQueue.delete(requestId);
+                logger.error(`[SSE] Response timeout for request ${requestId}`, {
+                  serverId,
+                  path,
+                  queueSize: session.messageQueue.size,
+                });
+                reject(new Error('SSE response timeout'));
+              }
+            }, timeout);
 
-          (session.messageQueue.get(requestId) as any).timeout = responseTimeout;
-        })
-        .catch(error => {
-          session.messageQueue.delete(requestId);
-          logger.error(`SSE POST failed`, {
-            serverId,
-            requestId,
-            error: error.message,
-            status: error.response?.status,
-            data: error.response?.data,
-          });
-          reject(new Error(`SSE POST failed: ${error.message}`));
+            (session.messageQueue.get(requestId) as any).timeout = responseTimeout;
+          } else if (postRes.statusCode === 200 && !parsedData) {
+            // 200 but no JSON - might be waiting for SSE response
+            logger.info(`[SSE] POST returned 200 with no JSON, waiting for SSE response...`, {
+              serverId,
+              requestId,
+              queueSize: session.messageQueue.size,
+            });
+            
+            // Set timeout for SSE response
+            const responseTimeout = setTimeout(() => {
+              if (session.messageQueue.has(requestId)) {
+                session.messageQueue.delete(requestId);
+                logger.error(`[SSE] Response timeout for request ${requestId}`, {
+                  serverId,
+                  path,
+                  queueSize: session.messageQueue.size,
+                });
+                reject(new Error('SSE response timeout'));
+              }
+            }, timeout);
+
+            (session.messageQueue.get(requestId) as any).timeout = responseTimeout;
+          } else {
+            // Unexpected status
+            session.messageQueue.delete(requestId);
+            logger.error(`[SSE] Unexpected POST status ${postRes.statusCode}`, {
+              serverId,
+              requestId,
+              data: responseData,
+            });
+            reject(new Error(`Unexpected status: ${postRes.statusCode} - ${responseData}`));
+          }
         });
+      });
+
+      postReq.on('error', (error) => {
+        session.messageQueue.delete(requestId);
+        logger.error(`SSE POST request failed`, {
+          serverId,
+          requestId,
+          error: error.message,
+        });
+        reject(new Error(`POST request failed: ${error.message}`));
+      });
+
+      postReq.write(postBody);
+      postReq.end();
     });
   }
 
   /**
    * Close SSE session
+   * CRITICAL: Only call this when absolutely necessary!
+   * Closing the stream will invalidate the session on the server!
    */
   private closeSSESession(serverId: string): void {
     const session = this.sseSessions.get(serverId);
     if (session) {
-      if (session.stream) {
-        session.stream.destroy();
-      }
+      logger.warn(`Closing SSE session - this will invalidate the session!`, { serverId });
+      
       // Reject all pending requests
       session.messageQueue.forEach((handler) => {
+        if ((handler as any).timeout) {
+          clearTimeout((handler as any).timeout);
+        }
         handler.reject(new Error('Session closed'));
       });
+      session.messageQueue.clear();
+      
+      // CRITICAL: Only destroy stream if it exists and is not already destroyed
+      if (session.stream && !session.stream.destroyed) {
+        try {
+          session.stream.destroy();
+        } catch (e: any) {
+          logger.error(`Error destroying SSE stream`, {
+            serverId,
+            error: e.message,
+          });
+        }
+      }
+      
       this.sseSessions.delete(serverId);
-      logger.info(`SSE session closed`, { serverId });
+      logger.info(`SSE session closed and removed`, { serverId });
     }
   }
 
@@ -790,6 +994,12 @@ export class MCPClientService {
       // Create new session
       session = await this.createSSESession(server);
       this.sseSessions.set(server.id, session);
+      
+      // CRITICAL: Wait for stream to be fully ready
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      logger.info(`[SSE] Session stabilized for tool execution`, {
+        serverId: server.id,
+      });
     }
 
     // Get execute path from config, default to /tools/{name}
@@ -827,40 +1037,56 @@ export class MCPClientService {
       
       return response;
     } catch (error: any) {
-      // If session failed, try to recreate
-      logger.warn(`SSE execution failed, recreating session...`, {
+      // CRITICAL: DON'T close session on error! Only recreate if connection error
+      logger.error(`SSE execution failed for ${toolName}`, {
         serverId: server.id,
         error: error.message,
       });
       
-      this.closeSSESession(server.id);
-      session = await this.createSSESession(server);
-      this.sseSessions.set(server.id, session);
-      
-      const response = await this.sendSSEMessage(server.id, executePath, {
-        jsonrpc: '2.0',
-        method: 'tools/call',
-        params: {
-          name: toolName,
-          arguments: args,
-        },
-        id: Date.now(),
-      });
-      
-      if (response.result) {
-        const result = response.result;
-        if (result.content) {
-          const content = Array.isArray(result.content) ? result.content : [result.content];
-          const textContent = content
-            .filter((c: any) => c.type === 'text' && c.text)
-            .map((c: any) => c.text)
-            .join('\n');
-          return textContent || result;
+      // Check if it's a connection error
+      if (error.message.includes('stream ended') || error.message.includes('stream closed') || error.message.includes('stream error')) {
+        logger.warn(`SSE connection error, recreating session...`, {
+          serverId: server.id,
+        });
+        
+        this.closeSSESession(server.id);
+        session = await this.createSSESession(server);
+        this.sseSessions.set(server.id, session);
+        
+        // CRITICAL: Wait for stream to be fully ready
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        logger.info(`[SSE] Session recreated and stabilized for tool execution`, {
+          serverId: server.id,
+        });
+        
+        const response = await this.sendSSEMessage(server.id, executePath, {
+          jsonrpc: '2.0',
+          method: 'tools/call',
+          params: {
+            name: toolName,
+            arguments: args,
+          },
+          id: Date.now(),
+        });
+        
+        if (response.result) {
+          const result = response.result;
+          if (result.content) {
+            const content = Array.isArray(result.content) ? result.content : [result.content];
+            const textContent = content
+              .filter((c: any) => c.type === 'text' && c.text)
+              .map((c: any) => c.text)
+              .join('\n');
+            return textContent || result;
+          }
+          return result;
         }
-        return result;
+        
+        return response;
+      } else {
+        // Not a connection error - just throw it
+        throw error;
       }
-      
-      return response;
     }
   }
 

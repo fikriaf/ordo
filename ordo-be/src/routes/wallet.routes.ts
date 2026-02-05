@@ -145,4 +145,31 @@ router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> 
   }
 });
 
+// GET /api/v1/wallet/portfolio - Get portfolio summary with real-time update
+router.get('/portfolio', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      });
+      return;
+    }
+
+    const portfolio = await walletService.getPortfolioSummary(req.user.id);
+
+    res.status(200).json({
+      success: true,
+      data: portfolio,
+      message: 'Portfolio summary retrieved and real-time update sent',
+    });
+  } catch (error: any) {
+    logger.error('Get portfolio route error:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to get portfolio',
+    });
+  }
+});
+
 export default router;

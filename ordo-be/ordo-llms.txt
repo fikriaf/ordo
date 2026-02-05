@@ -173,6 +173,178 @@ Ordo adalah REST API backend untuk AI assistant yang dapat melakukan 60+ operasi
 }
 ```
 
+## EVM Wallet Management
+
+### Create EVM Wallet
+**Endpoint**: `POST /wallet/evm/create`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "chainId": "ethereum"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "evm_wallet_uuid",
+    "chain_id": "ethereum",
+    "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+    "is_primary": true,
+    "created_at": "2026-02-03T00:00:00Z"
+  }
+}
+```
+
+**Supported Chains**:
+- `ethereum` - Ethereum Mainnet
+- `polygon` - Polygon (Matic)
+- `bsc` - Binance Smart Chain
+- `arbitrum` - Arbitrum One
+- `optimism` - Optimism
+- `avalanche` - Avalanche C-Chain
+
+**Notes**:
+- Private key encrypted with AES-256-GCM
+- First wallet per chain automatically set as primary
+- Supports multiple wallets per chain
+
+### Import EVM Wallet
+**Endpoint**: `POST /wallet/evm/import`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "chainId": "ethereum",
+  "privateKey": "0x..."
+}
+```
+
+**Response**: Same as create EVM wallet
+
+**Validation**:
+- Private key must be valid hex (0x...)
+- Must be valid Ethereum private key
+- Duplicate addresses rejected per chain
+
+### Get EVM Wallet Balance
+**Endpoint**: `GET /wallet/evm/:id/balance`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "native": 1.5,
+    "tokens": [
+      {
+        "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "symbol": "USDC",
+        "name": "USD Coin",
+        "amount": 100.5,
+        "decimals": 6
+      }
+    ]
+  }
+}
+```
+
+**Notes**:
+- Native balance (ETH, MATIC, BNB, etc.)
+- ERC-20 token balances
+- Real-time data from RPC providers
+
+### List User EVM Wallets
+**Endpoint**: `GET /wallets/evm`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Query Parameters**:
+- `chainId` (optional): Filter by chain
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "evm_wallet_uuid",
+      "chain_id": "ethereum",
+      "address": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+      "is_primary": true,
+      "created_at": "2026-02-03T00:00:00Z"
+    }
+  ]
+}
+```
+
+### Transfer Native Token (ETH, MATIC, BNB)
+**Endpoint**: `POST /wallet/evm/transfer/native`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "walletId": "evm_wallet_uuid",
+  "toAddress": "0x...",
+  "amount": 0.5
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "txHash": "0x...",
+    "amount": 0.5
+  },
+  "message": "Native token transferred successfully"
+}
+```
+
+### Transfer ERC-20 Token
+**Endpoint**: `POST /wallet/evm/transfer/token`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "walletId": "evm_wallet_uuid",
+  "toAddress": "0x...",
+  "tokenAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  "amount": 100
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "txHash": "0x...",
+    "amount": 100
+  },
+  "message": "Token transferred successfully"
+}
+```
+
+**Common Token Addresses (Ethereum)**:
+- USDC: `0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`
+- USDT: `0xdAC17F958D2ee523a2206206994597C13D831ec7`
+- DAI: `0x6B175474E89094C44Da98b954EedeAC495271d0F`
+
 ## AI Chat
 
 ### Send Message (Non-Streaming)
@@ -483,6 +655,706 @@ POST /actions/get_sol_price
 - Sensitive data (api_key, headers) not included in public endpoint
 - MCP servers provide additional AI capabilities and integrations
 
+## User Preferences
+
+### Get User Preferences
+**Endpoint**: `GET /preferences`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "pref_uuid",
+    "user_id": "user_uuid",
+    "max_single_transfer_sol": 1.0,
+    "max_daily_volume_usdc": 10000,
+    "require_approval_above_sol": 0.5,
+    "auto_approve_whitelisted": false,
+    "default_slippage_bps": 50,
+    "max_slippage_bps": 300,
+    "priority_fee_lamports": 10000,
+    "agent_autonomy_level": "medium",
+    "enable_auto_staking": false,
+    "enable_auto_compounding": false,
+    "notification_channels": ["mobile", "email"],
+    "alert_on_large_movements": true,
+    "alert_threshold_usdc": 1000,
+    "created_at": "2026-02-03T00:00:00Z",
+    "updated_at": "2026-02-03T00:00:00Z"
+  }
+}
+```
+
+**Preference Settings**:
+- `max_single_transfer_sol`: Maximum SOL per transaction
+- `max_daily_volume_usdc`: Daily trading limit in USDC
+- `require_approval_above_sol`: Approval threshold
+- `default_slippage_bps`: Default slippage (basis points)
+- `agent_autonomy_level`: low, medium, high
+- `enable_auto_staking`: Auto-stake rewards
+- `enable_auto_compounding`: Auto-compound earnings
+- `notification_channels`: Notification preferences
+- `alert_on_large_movements`: Alert on significant changes
+- `alert_threshold_usdc`: Alert threshold in USDC
+
+### Update User Preferences
+**Endpoint**: `PUT /preferences`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "max_single_transfer_sol": 2.5,
+  "default_slippage_bps": 100,
+  "agent_autonomy_level": "high",
+  "enable_auto_staking": true
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": { /* updated preferences */ },
+  "message": "Preferences updated successfully"
+}
+```
+
+**Notes**:
+- All fields optional (partial update)
+- Validated against allowed ranges
+- Changes apply immediately
+
+### Reset Preferences
+**Endpoint**: `POST /preferences/reset`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": { /* default preferences */ },
+  "message": "Preferences reset to defaults"
+}
+```
+
+## Approval Queue
+
+### Get Pending Approvals
+**Endpoint**: `GET /approvals/pending`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "approval_uuid",
+      "user_id": "user_uuid",
+      "request_type": "large_transfer",
+      "status": "pending",
+      "pending_transaction": {
+        "type": "transfer",
+        "amount": 5.0,
+        "to": "recipient_address"
+      },
+      "estimated_risk_score": 45.5,
+      "estimated_usd_value": 750.0,
+      "agent_reasoning": "Transfer amount exceeds user's max_single_transfer_sol setting",
+      "expires_at": "2026-02-03T12:15:00Z",
+      "created_at": "2026-02-03T12:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+**Request Types**:
+- `transaction`: General transaction
+- `setting_change`: Setting modification
+- `large_transfer`: Exceeds threshold
+- `high_risk_token`: High-risk token
+
+**Notes**:
+- Requests expire after 15 minutes
+- Agent provides reasoning for approval request
+- Includes alternative options when available
+
+### Approve Request
+**Endpoint**: `POST /approvals/:id/approve`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": { /* approved request */ },
+  "message": "Request approved successfully"
+}
+```
+
+### Reject Request
+**Endpoint**: `POST /approvals/:id/reject`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "reason": "Amount too high"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": { /* rejected request */ },
+  "message": "Request rejected successfully"
+}
+```
+
+### Get Approval History
+**Endpoint**: `GET /approvals/history`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Query Parameters**:
+- `status`: pending, approved, rejected, expired
+- `request_type`: Filter by type
+- `start_date`, `end_date`: Date range
+- `page`, `limit`: Pagination
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [ /* approval requests */ ],
+  "pagination": {
+    "total": 50,
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+## Token Transfer Operations
+
+### Transfer SOL
+**Endpoint**: `POST /transfer/sol`
+**Authentication**: Required
+
+Transfer SOL to another Solana address. Automatically checks balance, validates recipient address, and integrates with approval queue for large transfers.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "toAddress": "recipient_solana_address",
+  "amount": 0.5
+}
+```
+
+**Response (Success)**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature",
+    "amount": 0.5
+  },
+  "message": "SOL transferred successfully"
+}
+```
+
+**Response (Requires Approval)**:
+```json
+{
+  "success": true,
+  "requiresApproval": true,
+  "approvalRequest": {
+    "id": "uuid",
+    "type": "large_transfer",
+    "status": "pending",
+    "metadata": {
+      "estimatedUsdValue": 75.0,
+      "agentReasoning": "Transfer amount (0.5 SOL) exceeds your approval threshold"
+    }
+  },
+  "message": "Transfer requires approval"
+}
+```
+
+**Validation**:
+- Amount must be > 0
+- Wallet must have sufficient SOL balance
+- Must have enough SOL for transaction fee (~0.000005 SOL)
+- If amount > user's approval threshold, creates approval request
+
+**Use Cases**:
+- Send SOL to friends/family
+- Pay for services
+- Move funds between wallets
+- Automated payments with approval controls
+
+---
+
+### Transfer SPL Token
+**Endpoint**: `POST /transfer/token`
+**Authentication**: Required
+
+Transfer SPL tokens (USDC, USDT, etc.) to another Solana address.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "toAddress": "recipient_solana_address",
+  "tokenMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "amount": 100,
+  "decimals": 6
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature",
+    "amount": 100
+  },
+  "message": "Token transferred successfully"
+}
+```
+
+**Parameters**:
+- `tokenMint`: Token mint address (e.g., USDC: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v)
+- `decimals`: Token decimals (USDC: 6, most tokens: 9)
+
+**Common Token Mints**:
+- USDC: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` (decimals: 6)
+- USDT: `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` (decimals: 6)
+- SOL wrapped: `So11111111111111111111111111111111111111112` (decimals: 9)
+
+---
+
+### Estimate Transfer Fee
+**Endpoint**: `GET /transfer/fee`
+**Authentication**: Required
+
+Get estimated transaction fee for SOL or token transfers.
+
+**Query Parameters**:
+- `tokenMint` (optional): Token mint address for token transfer fee
+
+**Request Examples**:
+```
+GET /transfer/fee                                    # SOL transfer fee
+GET /transfer/fee?tokenMint=EPjFWdd...              # Token transfer fee
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "fee": 5000,
+    "feeInSOL": 0.000005
+  }
+}
+```
+
+**Notes**:
+- SOL transfer: ~5000 lamports (0.000005 SOL)
+- Token transfer: ~2,044,280 lamports (0.00204428 SOL) if ATA creation needed
+- Fees may vary based on network congestion
+
+---
+
+### Validate Transfer
+**Endpoint**: `POST /transfer/validate`
+**Authentication**: Required
+
+Validate transfer parameters before execution. Checks balance, amount, and fee requirements.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "amount": 0.5,
+  "tokenMint": "optional_token_mint"
+}
+```
+
+**Response (Valid)**:
+```json
+{
+  "success": true,
+  "data": {
+    "valid": true
+  }
+}
+```
+
+**Response (Invalid)**:
+```json
+{
+  "success": true,
+  "data": {
+    "valid": false,
+    "error": "Insufficient SOL balance"
+  }
+}
+```
+
+**Validation Checks**:
+- Amount > 0
+- Sufficient balance (SOL or token)
+- Sufficient SOL for transaction fee
+- Valid wallet ID
+
+**Use Cases**:
+- Pre-flight checks before transfer
+- UI validation feedback
+- Batch transfer validation
+
+---
+
+## Token Swap Operations (Jupiter)
+
+### Get Swap Quote
+**Endpoint**: `GET /swap/quote`
+**Authentication**: Required
+
+Get best swap route and price from Jupiter aggregator across 20+ DEXs.
+
+**Query Parameters**:
+- `inputMint` (required): Input token mint address
+- `outputMint` (required): Output token mint address
+- `amount` (required): Amount to swap
+- `slippageBps` (optional): Slippage tolerance in basis points (default: 50 = 0.5%)
+
+**Request Example**:
+```
+GET /swap/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=1&slippageBps=50
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "quote": { /* Jupiter quote response */ },
+    "inputAmount": 1.0,
+    "outputAmount": 150.5,
+    "priceImpact": 0.01,
+    "route": [
+      {
+        "swapInfo": {
+          "ammKey": "...",
+          "label": "Raydium",
+          "inputMint": "So11111111111111111111111111111111111111112",
+          "outputMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+        }
+      }
+    ]
+  }
+}
+```
+
+**Notes**:
+- Jupiter finds best route across multiple DEXs
+- Price impact calculated automatically
+- Multi-hop swaps supported
+- Slippage protection included
+
+**Common Token Mints**:
+- SOL: `So11111111111111111111111111111111111111112`
+- USDC: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v`
+- USDT: `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB`
+
+---
+
+### Execute Swap
+**Endpoint**: `POST /swap/execute`
+**Authentication**: Required
+
+Execute token swap using Jupiter quote.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "quoteResponse": { /* quote from /swap/quote */ }
+}
+```
+
+**Response (Success)**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature"
+  },
+  "message": "Swap executed successfully"
+}
+```
+
+**Response (Requires Approval)**:
+```json
+{
+  "success": true,
+  "requiresApproval": true,
+  "approvalRequest": {
+    "id": "uuid",
+    "type": "large_transfer",
+    "status": "pending",
+    "metadata": {
+      "estimatedUsdValue": 150.5,
+      "agentReasoning": "Swap value exceeds your approval threshold"
+    }
+  },
+  "message": "Swap requires approval"
+}
+```
+
+**Validation**:
+- Wallet must have sufficient balance
+- Quote must be recent (< 30 seconds old)
+- If swap value > approval threshold, creates approval request
+- Transaction confirmed on-chain
+
+**Use Cases**:
+- Swap SOL to stablecoins
+- Trade between tokens
+- Portfolio rebalancing
+- Automated trading strategies
+
+---
+
+### Get Token Price
+**Endpoint**: `GET /swap/price/:tokenMint`
+**Authentication**: Required
+
+Get current token price in USD from Jupiter.
+
+**Request Example**:
+```
+GET /swap/price/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "tokenMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "price": 1.0,
+    "currency": "USD"
+  }
+}
+```
+
+**Notes**:
+- Real-time prices from Jupiter
+- Aggregated from multiple sources
+- Updated every few seconds
+
+---
+
+### Get Supported Tokens
+**Endpoint**: `GET /swap/tokens`
+**Authentication**: Required
+
+Get list of all tokens supported by Jupiter (1000+ tokens).
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "address": "So11111111111111111111111111111111111111112",
+      "symbol": "SOL",
+      "name": "Solana",
+      "decimals": 9,
+      "logoURI": "https://..."
+    },
+    {
+      "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "symbol": "USDC",
+      "name": "USD Coin",
+      "decimals": 6,
+      "logoURI": "https://..."
+    }
+  ],
+  "count": 1234
+}
+```
+
+**Use Cases**:
+- Token search/autocomplete
+- Validate token addresses
+- Display token metadata
+
+---
+
+### Validate Swap
+**Endpoint**: `POST /swap/validate`
+**Authentication**: Required
+
+Validate swap parameters before execution.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "inputMint": "So11111111111111111111111111111111111111112",
+  "amount": 1.0
+}
+```
+
+**Response (Valid)**:
+```json
+{
+  "success": true,
+  "data": {
+    "valid": true
+  }
+}
+```
+
+**Response (Invalid)**:
+```json
+{
+  "success": true,
+  "data": {
+    "valid": false,
+    "error": "Insufficient SOL balance"
+  }
+}
+```
+
+**Validation Checks**:
+- Amount > 0
+- Sufficient balance
+- Valid token mints
+- Wallet exists
+
+**Use Cases**:
+- Pre-flight validation
+- UI feedback
+- Error prevention
+
+---
+
+## Token Risk Scoring
+
+### Get Token Risk Score
+**Endpoint**: `GET /tokens/:address/risk`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "token_address": "So11111111111111111111111111111111111111112",
+    "token_symbol": "SOL",
+    "token_name": "Solana",
+    "risk_score": 15.5,
+    "market_score": 95.0,
+    "liquidity_score": 98.0,
+    "holder_score": 92.0,
+    "rugcheck_score": 99.0,
+    "price_usd": 150.25,
+    "market_cap_usd": 75000000000,
+    "volume_24h_usd": 5000000000,
+    "liquidity_usd": 10000000000,
+    "holder_count": 500000,
+    "limiting_factors": {
+      "factors": []
+    },
+    "last_fetched_at": "2026-02-03T12:00:00Z"
+  }
+}
+```
+
+**Risk Levels**:
+- `0-30`: Safe (low risk)
+- `31-60`: Caution (moderate risk)
+- `61-100`: High Risk (avoid)
+
+**Notes**:
+- Scores cached for 1 hour
+- Auto-refreshed in background
+- Multi-dimensional risk analysis
+
+### Analyze Token
+**Endpoint**: `POST /tokens/:address/analyze`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "score": { /* token score */ },
+    "recommendation": "safe",
+    "reasons": [
+      "Token appears safe based on available metrics",
+      "High liquidity and holder count"
+    ]
+  }
+}
+```
+
+**Recommendations**:
+- `safe`: Safe to trade
+- `caution`: Exercise caution
+- `high_risk`: High risk, avoid
+
+### Search Tokens
+**Endpoint**: `GET /tokens/search?q=SOL&limit=10`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [ /* token scores */ ],
+  "count": 5
+}
+```
+
+### Get Risky Tokens
+**Endpoint**: `GET /tokens/risky?limit=20`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [ /* high-risk tokens */ ],
+  "count": 15
+}
+```
+
+**Use Case**: Monitor risky tokens in portfolio
+
 ## Health Check
 
 ### Basic Health Check
@@ -662,6 +1534,1966 @@ const chatResponse = await fetch('http://localhost:3000/api/v1/chat', {
 const { data: chatData } = await chatResponse.json();
 ```
 
+---
+
+## Analytics & Enhanced Data (Helius)
+
+Enhanced Solana data and analytics powered by Helius API. Provides detailed transaction parsing, token metadata, NFT data, and address activity analysis.
+
+**Note**: Requires `HELIUS_API_KEY` environment variable to be configured.
+
+### Get Enhanced Transactions
+**Endpoint**: `GET /analytics/transactions/:address`
+
+**Authentication**: Required
+
+Get enhanced transaction history with parsed data, token transfers, and event details.
+
+**Path Parameters**:
+- `address` (required): Solana address
+
+**Query Parameters**:
+- `limit` (optional): Number of transactions (1-100, default: 10)
+
+**Request Example**:
+```
+GET /analytics/transactions/DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK?limit=10
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "signature": "5wHu1qwD7q5ifaN5nwdcDqNFo53GJqa7nLp2BeeEpcnrzK4wCGEt5sABrfGjgU7FDB5ViwQuYrhZZHMDnurNnded",
+      "timestamp": 1706745600,
+      "type": "TRANSFER",
+      "source": "SYSTEM_PROGRAM",
+      "fee": 5000,
+      "feePayer": "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
+      "nativeTransfers": [
+        {
+          "fromUserAccount": "...",
+          "toUserAccount": "...",
+          "amount": 1000000000
+        }
+      ],
+      "tokenTransfers": [],
+      "events": {}
+    }
+  ],
+  "count": 10
+}
+```
+
+**Features**:
+- Parsed transaction data with human-readable types
+- Native SOL transfers included
+- SPL token transfers included
+- NFT transfers detected
+- DeFi protocol interactions parsed
+- Event logs decoded
+
+**Use Cases**:
+- Transaction history display
+- Portfolio tracking
+- Activity monitoring
+- Audit trails
+
+---
+
+### Get Parsed Transaction
+**Endpoint**: `GET /analytics/transaction/:signature`
+
+**Authentication**: Required
+
+Get detailed parsed transaction by signature.
+
+**Path Parameters**:
+- `signature` (required): Transaction signature
+
+**Request Example**:
+```
+GET /analytics/transaction/5wHu1qwD7q5ifaN5nwdcDqNFo53GJqa7nLp2BeeEpcnrzK4wCGEt5sABrfGjgU7FDB5ViwQuYrhZZHMDnurNnded
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "slot": 123456789,
+    "transaction": {
+      "message": {
+        "accountKeys": [...],
+        "instructions": [...]
+      },
+      "signatures": [...]
+    },
+    "meta": {
+      "err": null,
+      "fee": 5000,
+      "preBalances": [...],
+      "postBalances": [...]
+    }
+  }
+}
+```
+
+**Use Cases**:
+- Transaction verification
+- Detailed transaction analysis
+- Debugging failed transactions
+
+---
+
+### Get Token Metadata
+**Endpoint**: `GET /analytics/token/:mintAddress`
+
+**Authentication**: Required
+
+Get comprehensive token metadata using Helius DAS API.
+
+**Path Parameters**:
+- `mintAddress` (required): Token mint address
+
+**Request Example**:
+```
+GET /analytics/token/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "account": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "onChainMetadata": {
+      "metadata": {
+        "name": "USD Coin",
+        "symbol": "USDC",
+        "uri": "https://..."
+      }
+    },
+    "offChainMetadata": {
+      "metadata": {
+        "name": "USD Coin",
+        "symbol": "USDC",
+        "image": "https://...",
+        "description": "..."
+      }
+    }
+  }
+}
+```
+
+**Features**:
+- On-chain metadata from token program
+- Off-chain metadata from URI
+- Token images and descriptions
+- Creator information
+- Collection data for NFTs
+
+**Use Cases**:
+- Token display in UI
+- Portfolio enrichment
+- Token verification
+- NFT galleries
+
+---
+
+### Get NFTs by Owner
+**Endpoint**: `GET /analytics/nfts/:address`
+
+**Authentication**: Required
+
+Get all NFTs owned by an address.
+
+**Path Parameters**:
+- `address` (required): Owner address
+
+**Query Parameters**:
+- `limit` (optional): Number of NFTs (1-1000, default: 100)
+
+**Request Example**:
+```
+GET /analytics/nfts/DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK?limit=50
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "mint_address",
+      "content": {
+        "metadata": {
+          "name": "Cool NFT #123",
+          "symbol": "COOL",
+          "description": "...",
+          "image": "https://..."
+        },
+        "links": {
+          "image": "https://..."
+        }
+      },
+      "authorities": [...],
+      "compression": {...},
+      "grouping": [...],
+      "royalty": {...},
+      "creators": [...],
+      "ownership": {
+        "owner": "DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK",
+        "delegated": false
+      }
+    }
+  ],
+  "count": 50
+}
+```
+
+**Features**:
+- Compressed NFTs supported
+- Collection grouping
+- Creator information
+- Royalty data
+- Ownership details
+
+**Use Cases**:
+- NFT gallery display
+- Portfolio valuation
+- Collection management
+- Ownership verification
+
+---
+
+### Get Token Balances with Metadata
+**Endpoint**: `GET /analytics/balances/:address`
+
+**Authentication**: Required
+
+Get all token balances enriched with metadata.
+
+**Path Parameters**:
+- `address` (required): Wallet address
+
+**Request Example**:
+```
+GET /analytics/balances/DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "amount": 1000.5,
+      "decimals": 6,
+      "metadata": {
+        "name": "USD Coin",
+        "symbol": "USDC",
+        "image": "https://..."
+      }
+    },
+    {
+      "mint": "So11111111111111111111111111111111111111112",
+      "amount": 5.25,
+      "decimals": 9,
+      "metadata": {
+        "name": "Wrapped SOL",
+        "symbol": "SOL",
+        "image": "https://..."
+      }
+    }
+  ],
+  "count": 2
+}
+```
+
+**Features**:
+- All SPL token balances
+- Token metadata included
+- Human-readable amounts
+- Token images for UI
+
+**Use Cases**:
+- Portfolio display
+- Balance checking
+- Asset management
+- Wallet overview
+
+---
+
+### Search Assets
+**Endpoint**: `GET /analytics/search`
+
+**Authentication**: Required
+
+Search for tokens and NFTs by name or symbol.
+
+**Query Parameters**:
+- `q` (required): Search query
+- `limit` (optional): Number of results (1-100, default: 20)
+
+**Request Example**:
+```
+GET /analytics/search?q=USDC&limit=10
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "content": {
+        "metadata": {
+          "name": "USD Coin",
+          "symbol": "USDC"
+        }
+      }
+    }
+  ],
+  "count": 10
+}
+```
+
+**Use Cases**:
+- Token discovery
+- Asset search
+- Token selection in UI
+- Autocomplete features
+
+---
+
+### Get Address Activity
+**Endpoint**: `GET /analytics/activity/:address`
+
+**Authentication**: Required
+
+Get comprehensive activity summary for an address.
+
+**Path Parameters**:
+- `address` (required): Solana address
+
+**Request Example**:
+```
+GET /analytics/activity/DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "totalTransactions": 1523,
+    "types": {
+      "TRANSFER": 850,
+      "SWAP": 320,
+      "NFT_MINT": 150,
+      "STAKE": 100,
+      "UNKNOWN": 103
+    },
+    "recentActivity": [...],
+    "firstSeen": 1640995200,
+    "lastSeen": 1706745600
+  }
+}
+```
+
+**Features**:
+- Transaction count by type
+- First and last activity timestamps
+- Recent transactions included
+- Activity patterns analysis
+
+**Use Cases**:
+- User profiling
+- Activity monitoring
+- Wallet age verification
+- Behavior analysis
+
+---
+
+---
+
+## NFT Management
+
+NFT operations including minting, transferring, burning, and portfolio management. Integrates with Helius DAS API for metadata and Metaplex for on-chain operations.
+
+### Mint NFT
+**Endpoint**: `POST /nft/mint`
+
+**Authentication**: Required
+
+Mint a new NFT using Metaplex standard.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "name": "My Cool NFT",
+  "symbol": "COOL",
+  "uri": "https://arweave.net/metadata-uri",
+  "sellerFeeBasisPoints": 500,
+  "creators": [
+    {
+      "address": "creator_solana_address",
+      "share": 100
+    }
+  ]
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature",
+    "mintAddress": "nft_mint_address"
+  },
+  "message": "NFT minted successfully"
+}
+```
+
+**Parameters**:
+- `walletId`: User's wallet ID
+- `name`: NFT name (max 32 chars)
+- `symbol`: NFT symbol (max 10 chars)
+- `uri`: Metadata URI (Arweave, IPFS, etc.)
+- `sellerFeeBasisPoints`: Royalty (0-10000, default: 500 = 5%)
+- `creators`: Array of creators with share percentages
+
+**Use Cases**:
+- Create NFT collections
+- Mint generative art
+- Create membership tokens
+- Issue certificates/credentials
+
+---
+
+### Transfer NFT
+**Endpoint**: `POST /nft/transfer`
+
+**Authentication**: Required
+
+Transfer NFT to another wallet.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "mintAddress": "nft_mint_address",
+  "toAddress": "recipient_solana_address"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature"
+  },
+  "message": "NFT transferred successfully"
+}
+```
+
+**Validation**:
+- Wallet must own the NFT
+- Recipient address must be valid
+- Creates associated token account if needed
+
+**Use Cases**:
+- Send NFT to another user
+- Transfer between own wallets
+- Gift NFTs
+- Trade NFTs
+
+---
+
+### Burn NFT
+**Endpoint**: `POST /nft/burn`
+
+**Authentication**: Required
+
+Permanently destroy an NFT.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "mintAddress": "nft_mint_address"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature"
+  },
+  "message": "NFT burned successfully"
+}
+```
+
+**Warning**: This action is irreversible!
+
+**Use Cases**:
+- Remove unwanted NFTs
+- Burn for utility/rewards
+- Clean up wallet
+- Deflationary mechanics
+
+---
+
+### Get User NFTs
+**Endpoint**: `GET /nft/user`
+
+**Authentication**: Required
+
+Get NFTs owned by the authenticated user (from database).
+
+**Query Parameters**:
+- `limit` (optional): Number of NFTs (1-1000, default: 100)
+
+**Request Example**:
+```
+GET /nft/user?limit=50
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "user_id": "user_uuid",
+      "mint_address": "nft_mint_address",
+      "name": "My Cool NFT",
+      "symbol": "COOL",
+      "image": "https://...",
+      "metadata_uri": "https://...",
+      "last_price_sol": 1.5,
+      "acquired_at": "2026-02-03T00:00:00Z"
+    }
+  ],
+  "count": 50
+}
+```
+
+**Use Cases**:
+- Display user's NFT collection
+- Portfolio tracking
+- NFT gallery
+
+---
+
+### Get NFTs by Wallet
+**Endpoint**: `GET /nft/wallet/:address`
+
+**Authentication**: Required
+
+Get NFTs owned by any wallet address (via Helius).
+
+**Path Parameters**:
+- `address`: Solana wallet address
+
+**Query Parameters**:
+- `limit` (optional): Number of NFTs (1-1000, default: 100)
+
+**Request Example**:
+```
+GET /nft/wallet/DYw8jCTfwHNRJhhmFcbXvVDTqWMEVFBX6ZKUmG5CNSKK?limit=100
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "mint_address",
+      "content": {
+        "metadata": {
+          "name": "Cool NFT #123",
+          "symbol": "COOL",
+          "description": "...",
+          "image": "https://..."
+        },
+        "links": {
+          "image": "https://..."
+        }
+      },
+      "ownership": {
+        "owner": "wallet_address",
+        "delegated": false
+      },
+      "creators": [...],
+      "royalty": {...}
+    }
+  ],
+  "count": 100
+}
+```
+
+**Features**:
+- Real-time data from Helius
+- Compressed NFTs supported
+- Collection grouping
+- Creator information
+
+**Use Cases**:
+- View any wallet's NFTs
+- Verify NFT ownership
+- Browse collections
+- Market research
+
+---
+
+### Get NFT Metadata
+**Endpoint**: `GET /nft/metadata/:mintAddress`
+
+**Authentication**: Required
+
+Get detailed metadata for a specific NFT.
+
+**Path Parameters**:
+- `mintAddress`: NFT mint address
+
+**Request Example**:
+```
+GET /nft/metadata/ABC123...XYZ
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "account": "mint_address",
+    "onChainMetadata": {
+      "metadata": {
+        "name": "Cool NFT",
+        "symbol": "COOL",
+        "uri": "https://..."
+      }
+    },
+    "offChainMetadata": {
+      "metadata": {
+        "name": "Cool NFT",
+        "description": "...",
+        "image": "https://...",
+        "attributes": [...]
+      }
+    }
+  }
+}
+```
+
+**Use Cases**:
+- Display NFT details
+- Verify authenticity
+- Show attributes/traits
+- Collection information
+
+---
+
+### Get Collection Info
+**Endpoint**: `GET /nft/collection/:address`
+
+**Authentication**: Required
+
+Get collection statistics and information.
+
+**Path Parameters**:
+- `address`: Collection address
+
+**Request Example**:
+```
+GET /nft/collection/collection_address
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "collection_address": "address",
+    "name": "Cool Collection",
+    "symbol": "COOL",
+    "description": "...",
+    "image": "https://...",
+    "floor_price_sol": 1.5,
+    "volume_24h_sol": 100.0,
+    "holder_count": 5000,
+    "total_supply": 10000
+  }
+}
+```
+
+**Use Cases**:
+- Collection analytics
+- Floor price tracking
+- Volume monitoring
+- Market research
+
+---
+
+### Get NFT Portfolio Value
+**Endpoint**: `GET /nft/portfolio/value`
+
+**Authentication**: Required
+
+Get total value of user's NFT portfolio.
+
+**Request Example**:
+```
+GET /nft/portfolio/value
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "totalValue": 15.5,
+    "nftCount": 25
+  }
+}
+```
+
+**Calculation**:
+- Based on last known prices
+- Floor prices for collections
+- Manual valuations
+
+**Use Cases**:
+- Portfolio valuation
+- Net worth calculation
+- Investment tracking
+- Tax reporting
+
+---
+
+## Staking Operations
+
+Stake SOL tokens with leading staking protocols to earn rewards. Supports Marinade Finance, Jito, and Sanctum with automatic reward tracking and APY monitoring.
+
+### Stake Tokens
+**Endpoint**: `POST /stake`
+
+**Authentication**: Required
+
+Stake SOL tokens with a staking protocol.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "amount": 1.0,
+  "protocol": "marinade"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature",
+    "stakeAccount": "stake_account_address"
+  },
+  "message": "Tokens staked successfully"
+}
+```
+
+**Parameters**:
+- `walletId`: User's wallet ID
+- `amount`: Amount of SOL to stake
+- `protocol`: Staking protocol (`marinade`, `jito`, or `sanctum`)
+
+**Supported Protocols**:
+- **Marinade Finance**: Liquid staking with mSOL (~7.2% APY)
+- **Jito**: MEV-enhanced staking (~8.5% APY)
+- **Sanctum**: Multi-validator staking (~7.8% APY)
+
+**Use Cases**:
+- Earn passive income on SOL
+- Liquid staking for DeFi
+- Support network security
+- Diversify staking strategies
+
+---
+
+### Unstake Tokens
+**Endpoint**: `POST /stake/unstake`
+
+**Authentication**: Required
+
+Unstake SOL tokens from a staking protocol.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "amount": 1.0,
+  "protocol": "marinade",
+  "stakeAccountAddress": "stake_account_address"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature"
+  },
+  "message": "Tokens unstaked successfully"
+}
+```
+
+**Parameters**:
+- `walletId`: User's wallet ID
+- `amount`: Amount of SOL to unstake
+- `protocol`: Staking protocol (`marinade`, `jito`, or `sanctum`)
+- `stakeAccountAddress` (optional): Specific stake account to unstake from
+
+**Notes**:
+- Unstaking may have a cooldown period (varies by protocol)
+- Marinade: Instant unstake with small fee, or delayed unstake (2-3 days)
+- Jito: Standard Solana unstaking period (~2-3 days)
+- Sanctum: Protocol-specific unstaking rules
+
+**Use Cases**:
+- Withdraw staked SOL
+- Rebalance staking positions
+- Access liquidity
+- Switch protocols
+
+---
+
+### Get Staking Positions
+**Endpoint**: `GET /stake/positions`
+
+**Authentication**: Required
+
+Get all active staking positions for a wallet.
+
+**Query Parameters**:
+- `walletId` (required): Wallet ID
+
+**Request Example**:
+```
+GET /stake/positions?walletId=uuid
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "positions": [
+      {
+        "protocol": "marinade",
+        "stakeAccountAddress": "stake_account_address",
+        "stakedAmount": 10.5,
+        "rewards": 0.15,
+        "apy": 7.2,
+        "status": "active"
+      },
+      {
+        "protocol": "jito",
+        "stakeAccountAddress": "stake_account_address",
+        "stakedAmount": 5.0,
+        "rewards": 0.08,
+        "apy": 8.5,
+        "status": "active"
+      }
+    ],
+    "count": 2
+  }
+}
+```
+
+**Position Status**:
+- `active`: Currently staking and earning rewards
+- `unstaking`: Unstaking in progress (cooldown period)
+- `inactive`: Unstaked or closed
+
+**Use Cases**:
+- View all staking positions
+- Track rewards across protocols
+- Monitor APY rates
+- Portfolio management
+
+---
+
+### Get Staking Rewards
+**Endpoint**: `GET /stake/rewards`
+
+**Authentication**: Required
+
+Get total staking rewards earned across all protocols.
+
+**Query Parameters**:
+- `walletId` (required): Wallet ID
+
+**Request Example**:
+```
+GET /stake/rewards?walletId=uuid
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "totalRewards": 0.23,
+    "rewardsByProtocol": {
+      "marinade": 0.15,
+      "jito": 0.08,
+      "sanctum": 0.0
+    }
+  }
+}
+```
+
+**Notes**:
+- Rewards calculated based on staking duration and APY
+- Updated in real-time
+- Includes both claimed and unclaimed rewards
+
+**Use Cases**:
+- Track earnings
+- Compare protocol performance
+- Tax reporting
+- Investment analysis
+
+---
+
+### Get APY Rates
+**Endpoint**: `GET /stake/apy`
+
+**Authentication**: Not required
+
+Get current APY rates for all supported staking protocols.
+
+**Request Example**:
+```
+GET /stake/apy
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "marinade": 7.2,
+    "jito": 8.5,
+    "sanctum": 7.8
+  }
+}
+```
+
+**Notes**:
+- APY rates updated regularly
+- Rates may vary based on network conditions
+- Historical APY data available on protocol websites
+
+**Use Cases**:
+- Compare staking protocols
+- Optimize staking strategy
+- Calculate potential earnings
+- Market research
+
+---
+
+## Lending & Borrowing Operations
+
+Lend assets to earn interest or borrow with collateral across leading DeFi protocols. Supports Kamino Finance, MarginFi, and Solend with automatic interest tracking and health factor monitoring.
+
+### Lend Assets
+**Endpoint**: `POST /lend`
+
+**Authentication**: Required
+
+Lend assets to earn interest on a lending protocol.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "amount": 100,
+  "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "protocol": "kamino"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature",
+    "positionId": "position_id"
+  },
+  "message": "Assets lent successfully"
+}
+```
+
+**Parameters**:
+- `walletId`: User's wallet ID
+- `amount`: Amount to lend
+- `asset`: Token mint address (USDC, SOL, etc.)
+- `protocol`: Lending protocol (`kamino`, `marginfi`, or `solend`)
+
+**Supported Protocols**:
+- **Kamino Finance**: Optimized lending with auto-compounding (~5.2% APY for USDC)
+- **MarginFi**: Decentralized margin trading and lending (~4.8% APY for USDC)
+- **Solend**: Algorithmic money market (~5.0% APY for USDC)
+
+**Use Cases**:
+- Earn passive income on idle assets
+- Diversify yield strategies
+- Provide liquidity to DeFi protocols
+- Compound earnings automatically
+
+---
+
+### Borrow Assets
+**Endpoint**: `POST /lend/borrow`
+
+**Authentication**: Required
+
+Borrow assets by providing collateral.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "amount": 0.5,
+  "asset": "So11111111111111111111111111111111111111112",
+  "collateralAsset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "collateralAmount": 200,
+  "protocol": "marginfi"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature",
+    "loanId": "loan_id",
+    "healthFactor": 1.75
+  },
+  "message": "Assets borrowed successfully"
+}
+```
+
+**Parameters**:
+- `walletId`: User's wallet ID
+- `amount`: Amount to borrow
+- `asset`: Token to borrow (mint address)
+- `collateralAsset`: Collateral token (mint address)
+- `collateralAmount`: Amount of collateral
+- `protocol`: Lending protocol (`kamino`, `marginfi`, or `solend`)
+
+**Health Factor**:
+- > 1.0: Safe position
+- 0.8 - 1.0: Warning zone
+- < 0.8: Risk of liquidation
+
+**Notes**:
+- Collateral must exceed borrow value based on LTV ratio
+- Health factor monitored continuously
+- Liquidation occurs if health factor drops too low
+- Interest accrues on borrowed amount
+
+**Use Cases**:
+- Leverage trading positions
+- Access liquidity without selling assets
+- Arbitrage opportunities
+- Short-term capital needs
+
+---
+
+### Repay Loan
+**Endpoint**: `POST /lend/repay`
+
+**Authentication**: Required
+
+Repay borrowed assets to close or reduce loan.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "amount": 0.5,
+  "asset": "So11111111111111111111111111111111111111112",
+  "protocol": "marginfi",
+  "loanId": "loan_id"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature"
+  },
+  "message": "Loan repaid successfully"
+}
+```
+
+**Parameters**:
+- `walletId`: User's wallet ID
+- `amount`: Amount to repay
+- `asset`: Token to repay (mint address)
+- `protocol`: Lending protocol
+- `loanId` (optional): Specific loan to repay
+
+**Notes**:
+- Partial repayment supported
+- Interest included in repayment amount
+- Collateral released proportionally
+- Health factor improves after repayment
+
+**Use Cases**:
+- Close loan position
+- Reduce liquidation risk
+- Free up collateral
+- Manage debt levels
+
+---
+
+### Withdraw Lent Assets
+**Endpoint**: `POST /lend/withdraw`
+
+**Authentication**: Required
+
+Withdraw lent assets plus earned interest.
+
+**Request**:
+```json
+{
+  "walletId": "uuid",
+  "amount": 100,
+  "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "protocol": "kamino",
+  "positionId": "position_id"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "signature": "transaction_signature"
+  },
+  "message": "Assets withdrawn successfully"
+}
+```
+
+**Parameters**:
+- `walletId`: User's wallet ID
+- `amount`: Amount to withdraw
+- `asset`: Token to withdraw (mint address)
+- `protocol`: Lending protocol
+- `positionId` (optional): Specific position to withdraw from
+
+**Notes**:
+- Partial withdrawal supported
+- Interest earned included
+- Protocol may have withdrawal limits
+- Utilization affects availability
+
+**Use Cases**:
+- Realize earnings
+- Rebalance portfolio
+- Access liquidity
+- Close lending position
+
+---
+
+### Get Lending Positions
+**Endpoint**: `GET /lend/positions`
+
+**Authentication**: Required
+
+Get all active lending and borrowing positions.
+
+**Query Parameters**:
+- `walletId` (required): Wallet ID
+
+**Request Example**:
+```
+GET /lend/positions?walletId=uuid
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "positions": [
+      {
+        "protocol": "kamino",
+        "positionId": "position_id",
+        "type": "lend",
+        "asset": "USDC",
+        "amount": 100,
+        "interestRate": 5.2,
+        "status": "active"
+      },
+      {
+        "protocol": "marginfi",
+        "positionId": "loan_id",
+        "type": "borrow",
+        "asset": "SOL",
+        "amount": 0.5,
+        "interestRate": 5.8,
+        "healthFactor": 1.75,
+        "collateral": {
+          "asset": "USDC",
+          "amount": 200
+        },
+        "status": "active"
+      }
+    ],
+    "count": 2
+  }
+}
+```
+
+**Position Types**:
+- `lend`: Lending position earning interest
+- `borrow`: Borrowing position with collateral
+
+**Position Status**:
+- `active`: Currently active
+- `closed`: Position closed
+
+**Use Cases**:
+- Monitor all lending positions
+- Track interest earnings
+- Check health factors
+- Portfolio overview
+
+---
+
+### Get Interest Rates
+**Endpoint**: `GET /lend/rates`
+
+**Authentication**: Required
+
+Get current interest rates for all protocols and assets.
+
+**Request Example**:
+```
+GET /lend/rates
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "protocol": "kamino",
+      "asset": "USDC",
+      "supplyApy": 5.2,
+      "borrowApy": 8.5,
+      "utilization": 75.0
+    },
+    {
+      "protocol": "kamino",
+      "asset": "SOL",
+      "supplyApy": 3.8,
+      "borrowApy": 6.2,
+      "utilization": 65.0
+    },
+    {
+      "protocol": "marginfi",
+      "asset": "USDC",
+      "supplyApy": 4.8,
+      "borrowApy": 8.0,
+      "utilization": 70.0
+    }
+  ]
+}
+```
+
+**Rate Components**:
+- `supplyApy`: Annual percentage yield for lenders
+- `borrowApy`: Annual percentage rate for borrowers
+- `utilization`: Protocol utilization percentage
+
+**Notes**:
+- Rates updated in real-time
+- Higher utilization = higher rates
+- Rates vary by protocol and asset
+- Supply APY < Borrow APY (protocol spread)
+
+**Use Cases**:
+- Compare lending protocols
+- Find best rates
+- Optimize yield strategy
+- Market analysis
+
+---
+
+## User Preferences Management
+
+User preferences mengontrol perilaku AI agent, risk management, dan approval requirements.
+
+### Get User Preferences
+**Endpoint**: `GET /preferences`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "user_id": "uuid",
+    "max_single_transfer_sol": 1.0,
+    "max_daily_volume_usdc": 100.0,
+    "agent_autonomy_level": "medium",
+    "require_approval_above_usdc": 50.0,
+    "default_slippage_bps": 100,
+    "enable_auto_staking": false,
+    "enable_auto_compounding": false,
+    "min_token_risk_score": 50,
+    "block_high_risk_tokens": true,
+    "notify_on_approval_needed": true,
+    "notify_on_transaction_complete": true,
+    "notify_on_price_alerts": false,
+    "created_at": "2026-02-01T00:00:00Z",
+    "updated_at": "2026-02-01T00:00:00Z"
+  }
+}
+```
+
+**Default Values**:
+- `max_single_transfer_sol`: 1.0 SOL (max: 1000)
+- `max_daily_volume_usdc`: $100 (max: $1,000,000)
+- `agent_autonomy_level`: "medium" (low/medium/high)
+- `require_approval_above_usdc`: $50
+- `default_slippage_bps`: 100 (1%, range: 1-10000)
+- `min_token_risk_score`: 50 (range: 0-100)
+- `block_high_risk_tokens`: true
+
+### Update User Preferences
+**Endpoint**: `PUT /preferences`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "max_single_transfer_sol": 5.0,
+  "agent_autonomy_level": "high",
+  "require_approval_above_usdc": 100.0,
+  "default_slippage_bps": 50,
+  "enable_auto_staking": true,
+  "min_token_risk_score": 70,
+  "block_high_risk_tokens": true
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "user_id": "uuid",
+    "max_single_transfer_sol": 5.0,
+    "agent_autonomy_level": "high",
+    "require_approval_above_usdc": 100.0,
+    "default_slippage_bps": 50,
+    "enable_auto_staking": true,
+    "min_token_risk_score": 70,
+    "block_high_risk_tokens": true,
+    "created_at": "2026-02-01T00:00:00Z",
+    "updated_at": "2026-02-04T00:00:00Z"
+  },
+  "message": "Preferences updated successfully"
+}
+```
+
+**Validation Rules**:
+- `max_single_transfer_sol`: 0-1000
+- `max_daily_volume_usdc`: 0-1,000,000
+- `agent_autonomy_level`: "low", "medium", or "high"
+- `require_approval_above_usdc`: >= 0
+- `default_slippage_bps`: 1-10000 (basis points)
+- `min_token_risk_score`: 0-100
+
+### Reset Preferences to Defaults
+**Endpoint**: `POST /preferences/reset`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "user_id": "uuid",
+    "max_single_transfer_sol": 1.0,
+    "max_daily_volume_usdc": 100.0,
+    "agent_autonomy_level": "medium",
+    "require_approval_above_usdc": 50.0,
+    "default_slippage_bps": 100,
+    "enable_auto_staking": false,
+    "enable_auto_compounding": false,
+    "min_token_risk_score": 50,
+    "block_high_risk_tokens": true,
+    "notify_on_approval_needed": true,
+    "notify_on_transaction_complete": true,
+    "notify_on_price_alerts": false
+  },
+  "message": "Preferences reset to defaults"
+}
+```
+
+### Agent Autonomy Levels
+
+**Low Autonomy**:
+- Requires approval for ALL transactions
+- Maximum safety
+- User has full control
+- Best for beginners or high-value accounts
+
+**Medium Autonomy** (Default):
+- Requires approval for transactions above threshold
+- Balanced approach
+- Automatic execution for small transactions
+- Approval for large or risky transactions
+
+**High Autonomy**:
+- Minimal approval requirements
+- Only requires approval for very large transactions
+- Fast execution
+- Best for experienced users
+
+### Risk Management
+
+**Token Risk Scoring**:
+- Tokens scored 0-100 (higher = safer)
+- `min_token_risk_score`: Minimum acceptable score
+- `block_high_risk_tokens`: Block tokens with score > 70
+- Automatic risk checks before transactions
+
+**Daily Volume Limits**:
+- `max_daily_volume_usdc`: Maximum daily trading volume
+- Prevents excessive trading
+- Resets at midnight UTC
+- Protects against unauthorized access
+
+**Approval Thresholds**:
+- `require_approval_above_usdc`: Dollar threshold for approval
+- Applies to swaps, transfers, and trades
+- Overridden by "low" autonomy level
+- Ignored by "high" autonomy level (except very large)
+
+### Notification Preferences
+
+**Available Notifications**:
+- `notify_on_approval_needed`: Alert when approval required
+- `notify_on_transaction_complete`: Alert on transaction completion
+- `notify_on_price_alerts`: Alert on price movements
+
+**Notification Channels** (Future):
+- Email
+- Push notifications
+- Telegram
+- Discord
+
+### Auto-Features
+
+**Auto-Staking**:
+- `enable_auto_staking`: Automatically stake idle SOL
+- Uses best available staking pools
+- Optimizes for APY
+- Requires "medium" or "high" autonomy
+
+**Auto-Compounding**:
+- `enable_auto_compounding`: Automatically compound rewards
+- Reinvests staking rewards
+- Maximizes yield
+- Requires "high" autonomy
+
+### Use Cases
+
+**Conservative User**:
+```json
+{
+  "agent_autonomy_level": "low",
+  "max_single_transfer_sol": 0.5,
+  "max_daily_volume_usdc": 50,
+  "min_token_risk_score": 70,
+  "block_high_risk_tokens": true
+}
+```
+
+**Balanced User**:
+```json
+{
+  "agent_autonomy_level": "medium",
+  "max_single_transfer_sol": 5.0,
+  "max_daily_volume_usdc": 500,
+  "require_approval_above_usdc": 100,
+  "min_token_risk_score": 50
+}
+```
+
+**Aggressive Trader**:
+```json
+{
+  "agent_autonomy_level": "high",
+  "max_single_transfer_sol": 50.0,
+  "max_daily_volume_usdc": 10000,
+  "require_approval_above_usdc": 1000,
+  "min_token_risk_score": 30,
+  "enable_auto_staking": true,
+  "enable_auto_compounding": true
+}
+```
+
+---
+
+## Approval Queue (Human-in-the-Loop)
+
+Approval queue memungkinkan user untuk approve/reject transaksi high-risk atau large value sebelum dieksekusi.
+
+### Get Pending Approvals
+**Endpoint**: `GET /approvals/pending`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "user_id": "uuid",
+      "request_type": "large_transfer",
+      "status": "pending",
+      "pending_transaction": {
+        "action": "transfer_sol",
+        "toAddress": "ABC...XYZ",
+        "amount": 10.5
+      },
+      "estimated_risk_score": 45,
+      "estimated_usd_value": 1575.0,
+      "agent_reasoning": "Transfer amount ($1,575) exceeds your approval threshold ($100)",
+      "limiting_factors": {
+        "threshold_exceeded": true,
+        "amount_usdc": 1575.0,
+        "threshold_usdc": 100.0
+      },
+      "alternative_options": [
+        {
+          "option": "split_transfer",
+          "description": "Split into 16 smaller transfers of 0.65 SOL each",
+          "risk_reduction": "Each transfer below threshold"
+        }
+      ],
+      "expires_at": "2026-02-04T10:15:00Z",
+      "created_at": "2026-02-04T10:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+**Request Types**:
+- `transaction`: General transaction approval
+- `large_transfer`: Transfer exceeds threshold
+- `high_risk_token`: Token has high risk score
+- `setting_change`: Critical setting change
+
+**Status Values**:
+- `pending`: Awaiting user decision
+- `approved`: User approved, ready to execute
+- `rejected`: User rejected
+- `expired`: Expired (default 15 minutes)
+- `executed`: Transaction executed successfully
+
+### Get Approval Details
+**Endpoint**: `GET /approvals/:id`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "user_id": "uuid",
+    "request_type": "high_risk_token",
+    "status": "pending",
+    "pending_transaction": {
+      "action": "swap_tokens",
+      "inputMint": "SOL",
+      "outputMint": "RISKY123...",
+      "amount": 5.0,
+      "slippage": 100
+    },
+    "estimated_risk_score": 85,
+    "estimated_usd_value": 750.0,
+    "agent_reasoning": "Token RISKY has a high risk score (85/100). Factors: Low liquidity, new token, unverified contract",
+    "limiting_factors": {
+      "risk_score": 85,
+      "min_acceptable_score": 50,
+      "liquidity_score": 25,
+      "age_days": 3
+    },
+    "alternative_options": [
+      {
+        "option": "reduce_amount",
+        "description": "Swap only 1 SOL instead of 5 SOL",
+        "risk_reduction": "Limit exposure to high-risk token"
+      },
+      {
+        "option": "wait_24h",
+        "description": "Wait 24 hours for more market data",
+        "risk_reduction": "Better risk assessment with more data"
+      }
+    ],
+    "expires_at": "2026-02-04T10:15:00Z",
+    "created_at": "2026-02-04T10:00:00Z",
+    "updated_at": "2026-02-04T10:00:00Z"
+  }
+}
+```
+
+### Approve Request
+**Endpoint**: `POST /approvals/:id/approve`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "status": "approved",
+    "approved_at": "2026-02-04T10:05:00Z"
+  },
+  "message": "Request approved successfully"
+}
+```
+
+**Notes**:
+- Transaction will be executed immediately after approval
+- Cannot approve expired requests
+- Cannot approve already processed requests
+- Approval is logged for audit trail
+
+### Reject Request
+**Endpoint**: `POST /approvals/:id/reject`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Request**:
+```json
+{
+  "reason": "Amount too high, will split into smaller transfers"
+}
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "status": "rejected",
+    "rejected_at": "2026-02-04T10:05:00Z",
+    "rejection_reason": "Amount too high, will split into smaller transfers"
+  },
+  "message": "Request rejected successfully"
+}
+```
+
+**Notes**:
+- Transaction will NOT be executed
+- Reason is optional but recommended
+- Rejection is logged for audit trail
+
+### Get Approval History
+**Endpoint**: `GET /approvals/history`
+
+**Headers**: `Authorization: Bearer <token>`
+
+**Query Parameters**:
+- `status`: Filter by status (pending/approved/rejected/expired)
+- `request_type`: Filter by type
+- `start_date`: Filter from date (ISO 8601)
+- `end_date`: Filter to date (ISO 8601)
+- `page`: Page number (default: 1)
+- `limit`: Results per page (default: 20, max: 100)
+
+**Example Request**:
+```
+GET /approvals/history?status=approved&page=1&limit=10
+```
+
+**Response**:
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "request_type": "large_transfer",
+      "status": "approved",
+      "estimated_usd_value": 1575.0,
+      "approved_at": "2026-02-04T10:05:00Z",
+      "created_at": "2026-02-04T10:00:00Z"
+    },
+    {
+      "id": "uuid",
+      "request_type": "high_risk_token",
+      "status": "rejected",
+      "estimated_usd_value": 750.0,
+      "rejected_at": "2026-02-04T09:50:00Z",
+      "rejection_reason": "Risk too high",
+      "created_at": "2026-02-04T09:45:00Z"
+    }
+  ],
+  "pagination": {
+    "total": 25,
+    "page": 1,
+    "limit": 10
+  }
+}
+```
+
+### Approval Workflow
+
+**1. Transaction Triggers Approval**:
+```
+User: "Swap 10 SOL for RISKY token"
+↓
+AI checks user preferences
+↓
+Risk score: 85 (high risk)
+Amount: $1,500 (exceeds threshold)
+↓
+Creates approval request
+↓
+Returns: "This transaction requires your approval"
+```
+
+**2. User Reviews Approval**:
+```
+GET /approvals/pending
+↓
+Shows pending request with:
+- Risk assessment
+- Agent reasoning
+- Alternative options
+- Expiration time
+```
+
+**3. User Decides**:
+```
+Option A: Approve
+POST /approvals/:id/approve
+↓
+Transaction executes immediately
+↓
+Status: approved → executed
+
+Option B: Reject
+POST /approvals/:id/reject
+↓
+Transaction cancelled
+↓
+Status: rejected
+
+Option C: Wait
+Do nothing
+↓
+After 15 minutes: Auto-expires
+↓
+Status: expired
+```
+
+### Approval Triggers
+
+**Automatic approval required when**:
+1. **Amount exceeds threshold**
+   - Transaction value > `require_approval_above_usdc`
+   - Configurable in user preferences
+
+2. **High risk token**
+   - Token risk score > 70
+   - Or score < `min_token_risk_score`
+
+3. **Low autonomy level**
+   - User set `agent_autonomy_level` to "low"
+   - ALL transactions require approval
+
+4. **Daily limit exceeded**
+   - Total daily volume > `max_daily_volume_usdc`
+
+5. **Critical setting change**
+   - Changing approval thresholds
+   - Disabling security features
+
+### Alternative Options
+
+When approval is required, AI suggests alternatives:
+
+**For Large Transfers**:
+- Split into smaller transfers
+- Reduce amount
+- Schedule over multiple days
+
+**For High-Risk Tokens**:
+- Reduce exposure amount
+- Wait for more market data
+- Use safer alternative tokens
+- Set stop-loss limits
+
+**For Daily Limit**:
+- Wait until tomorrow
+- Increase daily limit (requires approval)
+- Prioritize critical transactions
+
+### Expiration Handling
+
+**Default Expiration**: 15 minutes
+
+**Expiration Process**:
+1. Approval created with `expires_at` timestamp
+2. Background job checks every minute
+3. Expired approvals auto-rejected
+4. User notified of expiration
+
+**Custom Expiration**:
+```json
+{
+  "expiresInMinutes": 30
+}
+```
+
+**Check Time Remaining**:
+```javascript
+const secondsLeft = (new Date(approval.expires_at) - new Date()) / 1000;
+console.log(`${Math.floor(secondsLeft / 60)} minutes remaining`);
+```
+
+### Real-Time Notifications
+
+**When approval needed**:
+- WebSocket notification sent
+- Email notification (if enabled)
+- Push notification (if enabled)
+
+**Notification payload**:
+```json
+{
+  "type": "approval_needed",
+  "approval_id": "uuid",
+  "request_type": "large_transfer",
+  "estimated_usd_value": 1575.0,
+  "expires_in_seconds": 900
+}
+```
+
+### Security Features
+
+**Ownership Verification**:
+- Only approval owner can approve/reject
+- 403 Forbidden for unauthorized access
+
+**Audit Trail**:
+- All approvals logged
+- Timestamps for all actions
+- Rejection reasons recorded
+- 30-day retention
+
+**Expiration Protection**:
+- Cannot approve expired requests
+- Auto-cleanup after 30 days
+- Prevents stale approvals
+
+### Use Cases
+
+**Conservative User**:
+```json
+{
+  "agent_autonomy_level": "low",
+  "require_approval_above_usdc": 10
+}
+```
+Result: Approves EVERY transaction
+
+**Balanced User**:
+```json
+{
+  "agent_autonomy_level": "medium",
+  "require_approval_above_usdc": 100
+}
+```
+Result: Approves transactions > $100 or high-risk
+
+**Aggressive Trader**:
+```json
+{
+  "agent_autonomy_level": "high",
+  "require_approval_above_usdc": 1000
+}
+```
+Result: Only approves very large transactions
+
+### Error Handling
+
+**Common Errors**:
+- `404`: Approval not found
+- `403`: Unauthorized (not your approval)
+- `400`: Already processed (approved/rejected)
+- `400`: Expired (cannot approve)
+- `500`: Server error
+
+**Error Response**:
+```json
+{
+  "success": false,
+  "error": "Request already processed"
+}
+```
+
+---
+
 ## Support & Resources
 
 - API Documentation: `/API.md`
@@ -672,4 +3504,2809 @@ const { data: chatData } = await chatResponse.json();
 
 - **API Version**: v1
 - **Backend Version**: 1.0.0
-- **Last Updated**: 2026-02-01
+- **Last Updated**: 2026-02-04 (Added Approval Queue - Human-in-the-Loop)
+
+
+## Approval Queue Integration with Transaction Services
+
+All major transaction services (transfers, swaps, lending) now integrate with the approval queue system. This provides human-in-the-loop control for high-value or high-risk operations.
+
+### Integrated Services
+
+1. **Token Transfer Service** (`transferSOLWithApproval`, `transferTokenWithApproval`)
+2. **Jupiter Swap Service** (`executeSwapWithApproval`)
+3. **Lending Service** (`lendWithApproval`, `borrowWithApproval`)
+
+### How It Works
+
+Each service checks:
+1. **Approval threshold** - Based on USD value and user preferences
+2. **Risk score** - For tokens with high risk scores (>70)
+3. **Daily volume limit** - Cumulative transaction volume per day
+
+If any check fails, the service:
+1. Creates an approval request in the queue
+2. Returns HTTP 202 Accepted with `approval_id`
+3. Provides alternative options to the user
+4. Waits for user approval before executing
+
+### Swap with Approval Example
+
+```javascript
+// Execute swap with approval check
+POST /api/v1/swap/execute
+{
+  "walletId": "uuid",
+  "quoteResponse": { /* Jupiter quote */ },
+  "inputTokenPriceUsd": 150,
+  "outputTokenPriceUsd": 1,
+  "tokenRiskScore": 85  // Optional, triggers approval if >70
+}
+
+// Response if approval required (HTTP 202)
+{
+  "success": true,
+  "approval_required": true,
+  "approval_id": "uuid",
+  "message": "Swap requires your approval: High-risk token detected (score: 85)"
+}
+
+// Response if executed (HTTP 200)
+{
+  "success": true,
+  "data": {
+    "signature": "tx_signature"
+  },
+  "message": "Swap executed successfully"
+}
+```
+
+### Lending with Approval Example
+
+```javascript
+// Lend with approval check
+POST /api/v1/lend
+{
+  "walletId": "uuid",
+  "amount": 2000,
+  "asset": "USDC",
+  "protocol": "kamino",
+  "assetPriceUsd": 1
+}
+
+// Response if approval required (HTTP 202)
+{
+  "success": true,
+  "approval_required": true,
+  "approval_id": "uuid",
+  "message": "Lending requires your approval: Amount ($2000) exceeds threshold"
+}
+
+// Borrow with approval check
+POST /api/v1/lend/borrow
+{
+  "walletId": "uuid",
+  "amount": 1500,
+  "asset": "USDC",
+  "collateralAsset": "SOL",
+  "collateralAmount": 15,
+  "protocol": "kamino",
+  "assetPriceUsd": 1,
+  "collateralPriceUsd": 150
+}
+```
+
+### Alternative Options
+
+When approval is required, the system generates alternative options:
+
+**For Swaps:**
+- Reduce swap amount to lower price impact
+- Split into multiple smaller swaps
+- Wait for better market conditions
+
+**For Transfers:**
+- Split into smaller transfers below threshold
+- Reduce transfer amount
+- Wait 24 hours for daily limit reset
+
+**For Lending/Borrowing:**
+- Reduce lending/borrowing amount
+- Split into multiple operations
+- Wait for daily limit reset
+
+### Approval Workflow
+
+1. **Transaction attempted** → Service checks thresholds
+2. **Approval created** → Returns 202 with approval_id
+3. **User reviews** → GET /api/v1/approvals/:id
+4. **User decides** → POST /api/v1/approvals/:id/approve or /reject
+5. **Transaction executes** → If approved, original transaction executes
+
+### AI Agent Integration
+
+When the AI agent attempts a transaction:
+
+```javascript
+// Agent attempts swap
+const result = await jupiterService.executeSwapWithApproval(
+  userId,
+  walletId,
+  quoteResponse,
+  inputTokenPriceUsd,
+  outputTokenPriceUsd,
+  tokenRiskScore
+);
+
+if (result.approval_required) {
+  // Inform user approval is needed
+  return {
+    message: result.message,
+    approval_id: result.approval_id,
+    alternatives: result.alternative_options
+  };
+} else {
+  // Transaction executed
+  return {
+    signature: result.signature,
+    message: "Transaction successful"
+  };
+}
+```
+
+### Testing
+
+Test scripts available:
+- `test-transfer-approval.js` - Transfer approval integration
+- `test-swap-approval.js` - Swap approval integration
+- `test-lending-approval.js` - Lending approval integration
+
+Each test demonstrates:
+- Small transactions executing without approval
+- Large transactions requiring approval
+- High-risk operations requiring approval
+- Approval/rejection workflow
+- Alternative options generation
+
+
+## Token Risk Scoring
+
+The system integrates with Range Protocol Market Score API v1.8 to provide risk assessment for Solana tokens. This helps users make informed trading decisions and automatically triggers approval for high-risk tokens.
+
+### Features
+
+1. **Risk Score Fetching** - Get comprehensive risk assessment for any token
+2. **Caching** - Scores cached for 1 hour to reduce API calls
+3. **High-Risk Detection** - Tokens with score > 70 automatically flagged
+4. **Search & Discovery** - Search tokens and find high-risk tokens
+5. **Background Refresh** - Automatic score updates for portfolio tokens
+
+### API Endpoints
+
+#### Get Token Risk Score
+
+```javascript
+GET /api/v1/tokens/:address/risk
+
+// Response
+{
+  "success": true,
+  "data": {
+    "token_address": "So11111111111111111111111111111111111111112",
+    "market_score": 95,
+    "risk_score": 15,
+    "liquidity_score": 98,
+    "limiting_factors": [],
+    "last_fetched": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+#### Analyze Token (Detailed Assessment)
+
+```javascript
+POST /api/v1/tokens/:address/analyze
+
+// Response
+{
+  "success": true,
+  "data": {
+    "score": {
+      "token_address": "...",
+      "market_score": 45,
+      "risk_score": 85,
+      "liquidity_score": 30,
+      "limiting_factors": ["High volatility", "Low liquidity"]
+    },
+    "isHighRisk": true,
+    "recommendation": "High risk - Exercise extreme caution",
+    "warnings": [
+      "This token has a high risk score",
+      "Consider smaller position sizes",
+      "Approval required for transactions",
+      "Limiting factor: High volatility",
+      "Limiting factor: Low liquidity"
+    ]
+  }
+}
+```
+
+#### Search Tokens
+
+```javascript
+GET /api/v1/tokens/search?q=So11&limit=10
+
+// Response
+{
+  "success": true,
+  "data": [
+    {
+      "token_address": "So11111111111111111111111111111111111111112",
+      "risk_score": 15,
+      ...
+    }
+  ],
+  "count": 1
+}
+```
+
+#### Get High-Risk Tokens
+
+```javascript
+GET /api/v1/tokens/risky?limit=20
+
+// Response
+{
+  "success": true,
+  "data": [
+    {
+      "token_address": "...",
+      "risk_score": 95,
+      "limiting_factors": ["High volatility", "Low liquidity", "Unverified token"]
+    }
+  ],
+  "count": 5,
+  "message": "High-risk tokens (score > 70)"
+}
+```
+
+#### Refresh Token Scores
+
+```javascript
+POST /api/v1/tokens/refresh
+{
+  "tokenAddresses": [
+    "So11111111111111111111111111111111111111112",
+    "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+  ]
+}
+
+// Response
+{
+  "success": true,
+  "message": "Refreshing scores for 2 tokens"
+}
+```
+
+### Integration with Approval Queue
+
+High-risk tokens (score > 70) automatically trigger approval requirements:
+
+```javascript
+// Swap with high-risk token
+POST /api/v1/swap/execute
+{
+  "walletId": "uuid",
+  "quoteResponse": { /* quote */ },
+  "tokenRiskScore": 85  // High risk
+}
+
+// Response (HTTP 202 Accepted)
+{
+  "success": true,
+  "approval_required": true,
+  "approval_id": "uuid",
+  "message": "Swap requires your approval: High-risk token detected (score: 85)"
+}
+```
+
+### Risk Score Interpretation
+
+- **0-30**: Low risk - Generally safe to trade
+- **31-50**: Moderate risk - Proceed with caution
+- **51-70**: Elevated risk - Review carefully before trading
+- **71-100**: High risk - Extreme caution required, approval mandatory
+
+### Limiting Factors
+
+Common limiting factors that increase risk:
+
+- **High volatility** - Price swings frequently
+- **Low liquidity** - Difficult to buy/sell without price impact
+- **Limited market depth** - Few buyers/sellers
+- **Unverified token** - Not verified by major platforms
+- **New token** - Recently launched, limited history
+
+### Caching Strategy
+
+- **Cache TTL**: 1 hour
+- **Cache key**: Token address
+- **Fallback**: Returns expired cache if API fails
+- **Background refresh**: Automatic updates for portfolio tokens
+
+### AI Agent Usage
+
+When the AI agent encounters a token:
+
+```javascript
+// 1. Check risk score
+const analysis = await tokenRiskService.analyzeToken(tokenAddress);
+
+if (analysis.isHighRisk) {
+  // 2. Warn user
+  return {
+    message: `⚠️ Warning: ${analysis.recommendation}`,
+    warnings: analysis.warnings,
+    riskScore: analysis.score.risk_score
+  };
+}
+
+// 3. Proceed with transaction (approval will be checked automatically)
+```
+
+### Performance
+
+- **First fetch**: ~100-200ms (API call)
+- **Cached fetch**: ~10-20ms (database)
+- **Concurrent requests**: Handled efficiently with caching
+- **Background refresh**: Non-blocking, runs asynchronously
+
+### Testing
+
+Test script: `node test-token-risk.js`
+
+Tests cover:
+- Risk score fetching
+- Token analysis
+- Caching behavior
+- Search functionality
+- High-risk detection
+- Integration with approval queue
+- Performance under load
+
+
+### Automatic Risk Checking in Swaps
+
+The swap endpoint now automatically fetches risk scores for output tokens:
+
+```javascript
+// Get quote with automatic risk assessment
+GET /api/v1/swap/quote?inputMint=SOL&outputMint=TOKEN&amount=1
+
+// Response includes risk score and warnings
+{
+  "success": true,
+  "data": {
+    "quote": { /* Jupiter quote */ },
+    "inputAmount": 1,
+    "outputAmount": 150,
+    "priceImpact": 0.5,
+    "riskScore": 85,  // Automatically fetched
+    "riskWarnings": [
+      "⚠️ High-risk token detected",
+      "Approval will be required for this swap",
+      "Risk factor: High volatility",
+      "Risk factor: Low liquidity"
+    ]
+  }
+}
+
+// Execute swap - risk score auto-fetched if not provided
+POST /api/v1/swap/execute
+{
+  "walletId": "uuid",
+  "quoteResponse": { /* quote */ }
+  // tokenRiskScore is optional - will be fetched automatically
+}
+```
+
+### AI Agent Actions for Risk Assessment
+
+Three new actions available for the AI agent:
+
+#### 1. Get Token Risk Score
+
+```javascript
+{
+  "action": "get_token_risk",
+  "parameters": {
+    "tokenAddress": "So11111111111111111111111111111111111111112"
+  }
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "tokenAddress": "...",
+    "marketScore": 95,
+    "riskScore": 15,
+    "liquidityScore": 98,
+    "limitingFactors": [],
+    "isHighRisk": false,
+    "lastFetched": "2024-01-15T10:30:00Z"
+  },
+  "message": "Risk score: 15/100 ✓ Low-Medium Risk"
+}
+```
+
+#### 2. Analyze Token Risk
+
+```javascript
+{
+  "action": "analyze_token_risk",
+  "parameters": {
+    "tokenAddress": "HighRisk1111111111111111111111111111111111"
+  }
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "riskScore": 85,
+    "isHighRisk": true,
+    "recommendation": "High risk - Exercise extreme caution",
+    "warnings": [
+      "This token has a high risk score",
+      "Consider smaller position sizes",
+      "Approval required for transactions",
+      "Limiting factor: High volatility"
+    ]
+  },
+  "message": "High risk - Exercise extreme caution\n\nWarnings:\n- This token has a high risk score\n- Consider smaller position sizes..."
+}
+```
+
+#### 3. Get High-Risk Tokens
+
+```javascript
+{
+  "action": "get_high_risk_tokens",
+  "parameters": {
+    "limit": 10
+  }
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "tokens": [
+      {
+        "address": "...",
+        "riskScore": 95,
+        "limitingFactors": ["High volatility", "Low liquidity"]
+      }
+    ],
+    "count": 5
+  },
+  "message": "Found 5 high-risk tokens. These tokens require approval for transactions."
+}
+```
+
+### AI Agent Usage Example
+
+When user asks to swap tokens:
+
+```javascript
+// 1. AI agent gets quote
+const quote = await getSwapQuote(inputMint, outputMint, amount);
+
+// 2. Check if risk warnings present
+if (quote.riskWarnings && quote.riskWarnings.length > 0) {
+  // 3. Warn user before proceeding
+  return {
+    message: `⚠️ Warning about ${outputToken}:\n${quote.riskWarnings.join('\n')}\n\nDo you want to proceed?`,
+    requiresConfirmation: true
+  };
+}
+
+// 4. If user confirms, execute swap
+// Risk score is automatically checked and approval triggered if needed
+const result = await executeSwap(walletId, quote);
+
+if (result.approval_required) {
+  return {
+    message: `This swap requires your approval: ${result.message}`,
+    approvalId: result.approval_id
+  };
+}
+```
+
+### Risk-Aware Trading Flow
+
+Complete flow with risk assessment:
+
+1. **User requests swap** → "Swap 1 SOL for TOKEN"
+2. **AI gets quote** → Includes risk score automatically
+3. **AI checks risk** → If high-risk, warns user
+4. **User confirms** → "Yes, proceed"
+5. **Execute swap** → Approval triggered if high-risk
+6. **User approves** → Transaction executes
+
+This ensures users are always informed about token risks before trading.
+
+
+## AI Agent Actions for Lending Operations
+
+Five new actions available for DeFi lending and borrowing on Kamino, MarginFi, and Solend:
+
+### 1. Lend Assets
+
+Lend assets to earn interest on supported protocols:
+
+```javascript
+{
+  "action": "lend_assets",
+  "parameters": {
+    "amount": 100,
+    "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+    "protocol": "kamino", // or "marginfi", "solend"
+    "assetPriceUsd": 1.0
+  }
+}
+
+// Response - Success
+{
+  "success": true,
+  "signature": "5xK7...",
+  "positionId": "kamino_lend_123",
+  "message": "Successfully lent 100 tokens on kamino"
+}
+
+// Response - Approval Required
+{
+  "success": false,
+  "approval_required": true,
+  "approval_id": "uuid",
+  "message": "Lending requires your approval: Transaction exceeds $100 limit"
+}
+```
+
+### 2. Borrow Assets
+
+Borrow assets with collateral:
+
+```javascript
+{
+  "action": "borrow_assets",
+  "parameters": {
+    "amount": 50,
+    "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+    "collateralAsset": "So11111111111111111111111111111111111111112", // SOL
+    "collateralAmount": 0.5,
+    "protocol": "marginfi",
+    "assetPriceUsd": 1.0,
+    "collateralPriceUsd": 150.0
+  }
+}
+
+// Response - Success
+{
+  "success": true,
+  "signature": "7yM9...",
+  "loanId": "marginfi_loan_456",
+  "healthFactor": 1.85,
+  "message": "Successfully borrowed 50 tokens on marginfi. Health factor: 1.85"
+}
+
+// Response - Approval Required
+{
+  "success": false,
+  "approval_required": true,
+  "approval_id": "uuid",
+  "message": "Borrowing requires your approval: Daily volume limit exceeded"
+}
+```
+
+### 3. Repay Loan
+
+Repay borrowed assets:
+
+```javascript
+{
+  "action": "repay_loan",
+  "parameters": {
+    "amount": 50,
+    "asset": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "protocol": "kamino",
+    "loanId": "loan_123" // optional
+  }
+}
+
+// Response
+{
+  "success": true,
+  "signature": "9zP2...",
+  "message": "Successfully repaid 50 tokens on kamino"
+}
+```
+
+### 4. Get Lending Positions
+
+Get all active lending and borrowing positions:
+
+```javascript
+{
+  "action": "get_lending_positions",
+  "parameters": {}
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "positions": [
+      {
+        "protocol": "kamino",
+        "positionId": "pos_123",
+        "type": "lend",
+        "asset": "USDC",
+        "amount": 100,
+        "interestRate": 5.2,
+        "status": "active"
+      },
+      {
+        "protocol": "marginfi",
+        "positionId": "pos_456",
+        "type": "borrow",
+        "asset": "USDC",
+        "amount": 50,
+        "interestRate": 8.5,
+        "healthFactor": 1.85,
+        "collateral": {
+          "asset": "SOL",
+          "amount": 0.5
+        },
+        "status": "active"
+      }
+    ],
+    "lendPositions": [...],
+    "borrowPositions": [...],
+    "totalLendPositions": 1,
+    "totalBorrowPositions": 1
+  },
+  "message": "Found 2 positions (1 lending, 1 borrowing)"
+}
+```
+
+### 5. Get Interest Rates
+
+Get current APY rates across all protocols:
+
+```javascript
+{
+  "action": "get_interest_rates",
+  "parameters": {}
+}
+
+// Response
+{
+  "success": true,
+  "data": {
+    "rates": [
+      {
+        "protocol": "kamino",
+        "asset": "USDC",
+        "supplyApy": 5.2,
+        "borrowApy": 8.5,
+        "utilization": 75.0
+      },
+      {
+        "protocol": "marginfi",
+        "asset": "SOL",
+        "supplyApy": 3.5,
+        "borrowApy": 5.8,
+        "utilization": 60.0
+      }
+    ],
+    "byProtocol": {
+      "kamino": [...],
+      "marginfi": [...],
+      "solend": [...]
+    },
+    "protocolCount": 3
+  },
+  "message": "Retrieved interest rates for 6 assets across 3 protocols"
+}
+```
+
+### AI Agent Lending Flow Example
+
+When user wants to lend or borrow:
+
+```javascript
+// User: "Lend 100 USDC on Kamino"
+
+// 1. AI agent gets current rates
+const rates = await getInterestRates();
+const kaminoUsdcRate = rates.data.rates.find(
+  r => r.protocol === 'kamino' && r.asset === 'USDC'
+);
+
+// 2. Inform user about APY
+console.log(`Current Kamino USDC supply APY: ${kaminoUsdcRate.supplyApy}%`);
+
+// 3. Execute lending with approval check
+const result = await lendAssets({
+  amount: 100,
+  asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  protocol: 'kamino',
+  assetPriceUsd: 1.0
+});
+
+// 4. Handle approval if needed
+if (result.approval_required) {
+  return {
+    message: `Lending requires approval: ${result.message}`,
+    approvalId: result.approval_id
+  };
+}
+
+// 5. Success
+return {
+  message: `✓ Successfully lent 100 USDC on Kamino at ${kaminoUsdcRate.supplyApy}% APY`,
+  positionId: result.positionId,
+  signature: result.signature
+};
+```
+
+### Borrowing with Health Factor Monitoring
+
+```javascript
+// User: "Borrow 50 USDC with 0.5 SOL collateral on MarginFi"
+
+// 1. Check current rates
+const rates = await getInterestRates();
+const marginfiRate = rates.data.rates.find(
+  r => r.protocol === 'marginfi' && r.asset === 'USDC'
+);
+
+// 2. Execute borrow
+const result = await borrowAssets({
+  amount: 50,
+  asset: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  collateralAsset: 'So11111111111111111111111111111111111111112',
+  collateralAmount: 0.5,
+  protocol: 'marginfi',
+  assetPriceUsd: 1.0,
+  collateralPriceUsd: 150.0
+});
+
+// 3. Warn if health factor is low
+if (result.healthFactor && result.healthFactor < 1.3) {
+  return {
+    message: `⚠️ Warning: Health factor is ${result.healthFactor.toFixed(2)}. Consider adding more collateral to avoid liquidation.`,
+    loanId: result.loanId
+  };
+}
+
+// 4. Success
+return {
+  message: `✓ Borrowed 50 USDC at ${marginfiRate.borrowApy}% APY. Health factor: ${result.healthFactor.toFixed(2)}`,
+  loanId: result.loanId
+};
+```
+
+### Supported Protocols
+
+- **Kamino Finance**: High-yield lending and borrowing
+- **MarginFi**: Decentralized margin trading protocol
+- **Solend**: Algorithmic money market protocol
+
+All lending operations integrate with the approval queue system for large transactions.
+
+
+## Price Feed Service
+
+The system provides real-time token prices from Pyth Network with 30-second caching for optimal performance.
+
+### Get Token Price
+
+Get current price for any supported token:
+
+```bash
+GET /api/v1/price/:tokenMint
+
+# Example: Get SOL price
+GET /api/v1/price/So11111111111111111111111111111111111111112
+
+# Response
+{
+  "success": true,
+  "data": {
+    "tokenMint": "So11111111111111111111111111111111111111112",
+    "price": 150.25,
+    "confidence": 0.15,
+    "timestamp": 1705320000000,
+    "isStale": false
+  }
+}
+```
+
+### Batch Price Requests
+
+Fetch prices for multiple tokens in a single request:
+
+```bash
+POST /api/v1/price/batch
+{
+  "tokens": [
+    {
+      "tokenMint": "So11111111111111111111111111111111111111112"
+    },
+    {
+      "tokenMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    },
+    {
+      "tokenMint": "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB",
+      "pythPriceId": "2b89b9dc8fdf9f34709a5b106b472f0f39bb6ca9ce04b0fd7f2e971688e2e53b"
+    }
+  ]
+}
+
+# Response
+{
+  "success": true,
+  "data": {
+    "prices": {
+      "So11111111111111111111111111111111111111112": {
+        "price": 150.25,
+        "confidence": 0.15,
+        "timestamp": 1705320000000,
+        "isStale": false
+      },
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": {
+        "price": 1.0,
+        "confidence": 0.001,
+        "timestamp": 1705320000000,
+        "isStale": false
+      }
+    },
+    "count": 2
+  }
+}
+```
+
+### Convenience Endpoints
+
+Quick access to common token prices:
+
+```bash
+# Get SOL price
+GET /api/v1/price/sol/current
+
+# Response
+{
+  "success": true,
+  "data": {
+    "symbol": "SOL",
+    "price": 150.25,
+    "currency": "USD"
+  }
+}
+
+# Get USDC price
+GET /api/v1/price/usdc/current
+
+# Response
+{
+  "success": true,
+  "data": {
+    "symbol": "USDC",
+    "price": 1.0,
+    "currency": "USD"
+  }
+}
+```
+
+### Supported Tokens
+
+Get list of tokens with pre-configured Pyth price feeds:
+
+```bash
+GET /api/v1/price/supported/tokens
+
+# Response
+{
+  "success": true,
+  "data": {
+    "tokens": [
+      "So11111111111111111111111111111111111111112",  // SOL
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+      "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"  // USDT
+    ],
+    "count": 3
+  }
+}
+```
+
+### Cache Management
+
+Price data is cached for 30 seconds to reduce API calls and improve performance.
+
+```bash
+# Get cache statistics
+GET /api/v1/price/cache/stats
+
+# Response
+{
+  "success": true,
+  "data": {
+    "size": 5,
+    "tokens": [
+      "So11111111111111111111111111111111111111112",
+      "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+    ]
+  }
+}
+
+# Clear cache for specific token
+DELETE /api/v1/price/cache?tokenMint=So11111111111111111111111111111111111111112
+
+# Clear all cache
+DELETE /api/v1/price/cache
+```
+
+### AI Agent Integration
+
+The AI agent automatically uses the price feed service:
+
+```javascript
+// User: "What's the current SOL price?"
+
+// AI agent calls:
+const result = await getSolPrice();
+
+// Response:
+{
+  "success": true,
+  "symbol": "SOL",
+  "price": 150.25,
+  "currency": "USD",
+  "timestamp": "2024-01-15T10:30:00Z"
+}
+
+// User: "Get price for USDC"
+
+// AI agent calls:
+const result = await getTokenPrice({
+  tokenMint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+});
+
+// Response:
+{
+  "success": true,
+  "tokenMint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "price": 1.0,
+  "currency": "USD",
+  "confidence": 0.001,
+  "isStale": false
+}
+```
+
+### Stale Data Handling
+
+If Pyth Network data is unavailable or stale (>60 seconds old):
+
+1. **Cached Data**: Returns cached data with `isStale: true` flag
+2. **Fallback**: Falls back to Jupiter price API if available
+3. **Error**: Returns error if no data available
+
+```javascript
+// Stale price response
+{
+  "success": true,
+  "data": {
+    "price": 150.25,
+    "isStale": true,  // ⚠️ Data is stale
+    "timestamp": 1705319940000
+  }
+}
+```
+
+### Custom Price Feed IDs
+
+For tokens not in the default list, provide Pyth price ID:
+
+```bash
+GET /api/v1/price/:tokenMint?pythPriceId=<pyth_price_id>
+
+# Or in batch request:
+POST /api/v1/price/batch
+{
+  "tokens": [
+    {
+      "tokenMint": "CustomToken123...",
+      "pythPriceId": "abc123..."
+    }
+  ]
+}
+```
+
+### Performance Features
+
+- **30-second caching**: Reduces API calls and improves response time
+- **Batch requests**: Fetch multiple prices in one call
+- **Stale data fallback**: Always returns data when available
+- **Confidence intervals**: Pyth provides price confidence for risk assessment
+
+
+## Agent Memory with Vector Embeddings
+
+The AI agent now has long-term memory capabilities using vector embeddings for semantic search. This allows the agent to remember user preferences, past decisions, and important context across conversations.
+
+### Store Memory
+
+Store important information for the AI agent to remember:
+
+```bash
+POST /api/v1/memory/store
+{
+  "content": "User prefers conservative trading with max 5% slippage",
+  "memoryType": "preference",
+  "importanceScore": 0.9,
+  "tags": ["trading", "risk-management"],
+  "metadata": {
+    "category": "trading-preferences"
+  }
+}
+
+# Response
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "user_id": "uuid",
+    "content": "User prefers conservative trading with max 5% slippage",
+    "memory_type": "preference",
+    "importance_score": 0.9,
+    "tags": ["trading", "risk-management"],
+    "created_at": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### Memory Types
+
+- **conversation**: Important conversation context
+- **decision**: User decisions and choices
+- **preference**: User preferences and settings
+- **fact**: Facts about the user or their assets
+- **instruction**: Specific instructions from the user
+
+### Semantic Search
+
+Search memories using natural language - finds semantically similar memories:
+
+```bash
+POST /api/v1/memory/search
+{
+  "query": "What are my trading preferences?",
+  "limit": 5,
+  "minSimilarity": 0.7
+}
+
+# Response
+{
+  "success": true,
+  "data": {
+    "results": [
+      {
+        "memory": {
+          "id": "uuid",
+          "content": "User prefers conservative trading with max 5% slippage",
+          "memory_type": "preference",
+          "importance_score": 0.9,
+          "created_at": "2024-01-15T10:30:00Z"
+        },
+        "similarity": 0.95
+      },
+      {
+        "memory": {
+          "id": "uuid",
+          "content": "User wants to avoid high-risk tokens",
+          "memory_type": "instruction",
+          "importance_score": 0.85,
+          "created_at": "2024-01-14T15:20:00Z"
+        },
+        "similarity": 0.82
+      }
+    ],
+    "count": 2
+  }
+}
+```
+
+### Get Recent Memories
+
+Retrieve recent memories, optionally filtered by type:
+
+```bash
+# All recent memories
+GET /api/v1/memory/recent?limit=10
+
+# Only preferences
+GET /api/v1/memory/recent?limit=10&type=preference
+
+# Response
+{
+  "success": true,
+  "data": {
+    "memories": [
+      {
+        "id": "uuid",
+        "content": "User prefers conservative trading",
+        "memory_type": "preference",
+        "importance_score": 0.9,
+        "access_count": 5,
+        "created_at": "2024-01-15T10:30:00Z"
+      }
+    ],
+    "count": 1
+  }
+}
+```
+
+### Get Memories by Tags
+
+Find memories with specific tags:
+
+```bash
+POST /api/v1/memory/tags
+{
+  "tags": ["trading", "risk-management"],
+  "limit": 10
+}
+
+# Response
+{
+  "success": true,
+  "data": {
+    "memories": [...],
+    "count": 3
+  }
+}
+```
+
+### Memory Statistics
+
+Get overview of stored memories:
+
+```bash
+GET /api/v1/memory/stats/user
+
+# Response
+{
+  "success": true,
+  "data": {
+    "total_memories": 25,
+    "conversation_memories": 10,
+    "decision_memories": 5,
+    "preference_memories": 7,
+    "fact_memories": 2,
+    "instruction_memories": 1,
+    "avg_importance": 0.75,
+    "last_memory_at": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### Update Memory Importance
+
+Adjust importance score based on usage:
+
+```bash
+PATCH /api/v1/memory/:id/importance
+{
+  "importanceScore": 0.95
+}
+
+# Response
+{
+  "success": true,
+  "message": "Memory importance updated"
+}
+```
+
+### Delete Memory
+
+Remove a specific memory:
+
+```bash
+DELETE /api/v1/memory/:id
+
+# Response
+{
+  "success": true,
+  "message": "Memory deleted successfully"
+}
+```
+
+### Temporary Memories
+
+Store memories with expiration:
+
+```bash
+POST /api/v1/memory/store
+{
+  "content": "User is currently looking at NFT collection XYZ",
+  "memoryType": "conversation",
+  "importanceScore": 0.5,
+  "expiresAt": "2024-01-16T10:30:00Z"  // Expires in 24 hours
+}
+```
+
+### AI Agent Integration
+
+The AI agent automatically:
+
+1. **Stores Important Context**: Saves key decisions and preferences
+2. **Retrieves Relevant Memories**: Searches memories before responding
+3. **Learns from Interactions**: Improves responses based on past context
+
+Example flow:
+
+```javascript
+// User: "I want to swap tokens"
+
+// 1. AI searches memories for trading preferences
+const memories = await searchMemories(userId, "trading preferences", 3);
+
+// 2. AI finds: "User prefers conservative trading with max 5% slippage"
+
+// 3. AI responds with personalized advice:
+"I'll help you swap tokens. Based on your preferences, I'll set slippage to 5% 
+for conservative trading. What tokens would you like to swap?"
+
+// 4. After swap, AI stores the decision:
+await storeMemory({
+  content: "User swapped 1 SOL for USDC with 5% slippage",
+  memoryType: "decision",
+  importanceScore: 0.7
+});
+```
+
+### Vector Embeddings
+
+- Uses OpenAI `text-embedding-3-small` model (1536 dimensions)
+- Cosine similarity for semantic search
+- Importance-weighted ranking
+- Automatic access tracking
+
+### Memory Management
+
+**Cleanup Expired Memories**:
+```bash
+POST /api/v1/memory/cleanup
+
+# Response
+{
+  "success": true,
+  "data": {
+    "deletedCount": 5
+  },
+  "message": "Cleaned up 5 expired memories"
+}
+```
+
+### Use Cases
+
+1. **Personalized Trading**: Remember risk tolerance and preferences
+2. **Context Continuity**: Maintain context across conversations
+3. **Learning User Patterns**: Adapt to user behavior over time
+4. **Smart Recommendations**: Suggest based on past decisions
+5. **Preference Management**: Store and recall user settings
+
+### Performance
+
+- Semantic search: ~200-500ms (including embedding generation)
+- Text fallback: ~50-100ms
+- Memory storage: ~300-600ms (including embedding)
+- Recent memories: ~20-50ms (cached)
+
+
+## Webhook System
+
+The system provides webhooks for real-time event notifications to external URLs. Users can subscribe to specific events and receive HTTP POST requests when those events occur.
+
+### Create Webhook
+
+Register a webhook URL to receive event notifications:
+
+```bash
+POST /api/v1/webhooks
+{
+  "url": "https://your-domain.com/webhook",
+  "events": ["transaction.confirmed", "approval.created", "balance.changed"],
+  "description": "Production webhook for transaction notifications",
+  "retryCount": 3,
+  "timeoutSeconds": 30,
+  "metadata": {
+    "environment": "production"
+  }
+}
+
+# Response
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "user_id": "uuid",
+    "url": "https://your-domain.com/webhook",
+    "secret": "generated_secret_key",
+    "events": ["transaction.confirmed", "approval.created", "balance.changed"],
+    "is_active": true,
+    "retry_count": 3,
+    "timeout_seconds": 30,
+    "created_at": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### Available Events
+
+```bash
+GET /api/v1/webhooks/events/available
+
+# Response
+{
+  "success": true,
+  "data": {
+    "events": [
+      "transaction.created",
+      "transaction.confirmed",
+      "transaction.failed",
+      "approval.created",
+      "approval.approved",
+      "approval.rejected",
+      "balance.changed",
+      "nft.received",
+      "nft.transferred",
+      "price.alert",
+      "portfolio.updated"
+    ],
+    "count": 11
+  }
+}
+```
+
+### Webhook Payload
+
+When an event occurs, your webhook URL receives:
+
+```json
+{
+  "event": "transaction.confirmed",
+  "data": {
+    "id": "uuid",
+    "signature": "5xK7...",
+    "type": "transfer_sol",
+    "amount": 1.5,
+    "status": "confirmed"
+  },
+  "timestamp": "2024-01-15T10:30:00Z",
+  "webhook_id": "uuid"
+}
+```
+
+### Signature Verification
+
+Verify webhook authenticity using HMAC-SHA256:
+
+```javascript
+const crypto = require('crypto');
+
+function verifyWebhook(payload, signature, secret) {
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(payload))
+    .digest('hex');
+    
+  return crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  );
+}
+
+// In your webhook handler:
+app.post('/webhook', (req, res) => {
+  const signature = req.headers['x-webhook-signature'];
+  const secret = 'your_webhook_secret';
+  
+  if (!verifyWebhook(req.body, signature, secret)) {
+    return res.status(401).send('Invalid signature');
+  }
+  
+  // Process webhook
+  console.log('Event:', req.body.event);
+  console.log('Data:', req.body.data);
+  
+  res.status(200).send('OK');
+});
+```
+
+### Get User Webhooks
+
+List all webhooks for the authenticated user:
+
+```bash
+GET /api/v1/webhooks
+
+# Response
+{
+  "success": true,
+  "data": {
+    "webhooks": [
+      {
+        "id": "uuid",
+        "url": "https://your-domain.com/webhook",
+        "events": ["transaction.confirmed"],
+        "is_active": true,
+        "total_deliveries": 150,
+        "successful_deliveries": 148,
+        "failed_deliveries": 2,
+        "last_success_at": "2024-01-15T10:30:00Z"
+      }
+    ],
+    "count": 1
+  }
+}
+```
+
+### Update Webhook
+
+Modify webhook configuration:
+
+```bash
+PUT /api/v1/webhooks/:id
+{
+  "url": "https://new-domain.com/webhook",
+  "events": ["transaction.confirmed", "balance.changed"],
+  "description": "Updated webhook"
+}
+
+# Response
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "url": "https://new-domain.com/webhook",
+    "events": ["transaction.confirmed", "balance.changed"],
+    "updated_at": "2024-01-15T11:00:00Z"
+  }
+}
+```
+
+### Toggle Webhook
+
+Enable or disable webhook:
+
+```bash
+PATCH /api/v1/webhooks/:id/toggle
+{
+  "isActive": false
+}
+
+# Response
+{
+  "success": true,
+  "message": "Webhook deactivated"
+}
+```
+
+### Test Webhook
+
+Send a test event to verify webhook configuration:
+
+```bash
+POST /api/v1/webhooks/:id/test
+
+# Response
+{
+  "success": true,
+  "data": {
+    "id": "delivery_uuid",
+    "status": "success",
+    "response_status": 200,
+    "duration_ms": 245,
+    "delivered_at": "2024-01-15T10:30:00Z"
+  },
+  "message": "Webhook test successful"
+}
+```
+
+### Get Delivery History
+
+View webhook delivery attempts:
+
+```bash
+GET /api/v1/webhooks/:id/deliveries?limit=50
+
+# Response
+{
+  "success": true,
+  "data": {
+    "deliveries": [
+      {
+        "id": "uuid",
+        "event_type": "transaction.confirmed",
+        "status": "success",
+        "attempt_count": 1,
+        "response_status": 200,
+        "duration_ms": 245,
+        "created_at": "2024-01-15T10:30:00Z",
+        "delivered_at": "2024-01-15T10:30:00Z"
+      },
+      {
+        "id": "uuid",
+        "event_type": "balance.changed",
+        "status": "failed",
+        "attempt_count": 3,
+        "response_status": 500,
+        "error_message": "Connection timeout",
+        "created_at": "2024-01-15T09:00:00Z",
+        "failed_at": "2024-01-15T09:01:00Z"
+      }
+    ],
+    "count": 2
+  }
+}
+```
+
+### Delete Webhook
+
+Remove a webhook:
+
+```bash
+DELETE /api/v1/webhooks/:id
+
+# Response
+{
+  "success": true,
+  "message": "Webhook deleted successfully"
+}
+```
+
+### Retry Logic
+
+Failed deliveries are automatically retried with exponential backoff:
+
+- **Attempt 1**: Immediate
+- **Attempt 2**: After 1 minute
+- **Attempt 3**: After 5 minutes
+- **Attempt 4**: After 15 minutes (if retry_count = 3)
+
+### Best Practices
+
+**Security**:
+- Always verify webhook signatures
+- Use HTTPS URLs only
+- Keep webhook secrets secure
+- Implement rate limiting on your endpoint
+
+**Reliability**:
+- Return 200 status code quickly
+- Process events asynchronously
+- Implement idempotency (same event may be delivered multiple times)
+- Log all webhook deliveries
+
+**Performance**:
+- Respond within timeout (default: 30 seconds)
+- Use appropriate retry counts
+- Monitor delivery success rates
+- Clean up old delivery records
+
+### Automatic Retry Mechanism
+
+The webhook system includes automatic retry with exponential backoff:
+
+**Retry Strategy**:
+- **Max attempts**: 3 retries (configurable per webhook)
+- **Exponential backoff**: 1s → 2s → 4s between attempts
+- **Background job**: Runs every 2 minutes to process failed deliveries
+- **Final status**: Marked as "failed" after max retries exceeded
+
+**Retry Headers**:
+When retrying, the system adds:
+```
+X-Webhook-Retry: 2  // Attempt number
+```
+
+**Delivery States**:
+- `pending`: Initial state, not yet delivered
+- `retrying`: Failed but will retry
+- `success`: Successfully delivered
+- `failed`: Permanently failed after max retries
+
+**Monitoring Retries**:
+```bash
+GET /api/v1/webhooks/:id/deliveries
+
+# Response shows attempt_count and status
+{
+  "deliveries": [
+    {
+      "id": "uuid",
+      "status": "success",
+      "attempt_count": 2,  // Succeeded on 2nd attempt
+      "duration_ms": 150
+    }
+  ]
+}
+```
+
+**Best Practices for Retry Handling**:
+- Return 2xx status codes for successful processing
+- Return 5xx for temporary failures (will retry)
+- Return 4xx for permanent failures (won't retry)
+- Implement idempotency keys to handle duplicate deliveries
+
+### Example Integration
+
+```javascript
+// Express.js webhook handler
+const express = require('express');
+const crypto = require('crypto');
+
+const app = express();
+app.use(express.json());
+
+app.post('/webhook', (req, res) => {
+  // 1. Verify signature
+  const signature = req.headers['x-webhook-signature'];
+  const secret = process.env.WEBHOOK_SECRET;
+  
+  const expectedSignature = crypto
+    .createHmac('sha256', secret)
+    .update(JSON.stringify(req.body))
+    .digest('hex');
+  
+  if (signature !== expectedSignature) {
+    return res.status(401).send('Invalid signature');
+  }
+  
+  // 2. Respond quickly
+  res.status(200).send('OK');
+  
+  // 3. Process asynchronously
+  processWebhook(req.body).catch(console.error);
+});
+
+async function processWebhook(payload) {
+  const { event, data } = payload;
+  
+  switch (event) {
+    case 'transaction.confirmed':
+      await handleTransactionConfirmed(data);
+      break;
+    case 'balance.changed':
+      await handleBalanceChanged(data);
+      break;
+    case 'approval.created':
+      await handleApprovalCreated(data);
+      break;
+  }
+}
+```
+
+### Webhook Headers
+
+Each webhook request includes:
+
+- `Content-Type: application/json`
+- `X-Webhook-Signature: <hmac_sha256_signature>`
+- `X-Webhook-Event: <event_type>`
+- `User-Agent: Ordo-Webhook/1.0`
+
+
+## Real-time Portfolio Updates
+
+The system now provides real-time portfolio updates via WebSocket, allowing users to see balance changes instantly without polling.
+
+### WebSocket Connection
+
+Connect to WebSocket server with JWT authentication:
+
+```javascript
+import io from 'socket.io-client';
+
+const socket = io('http://localhost:3000', {
+  auth: {
+    token: 'your_jwt_token'
+  }
+});
+
+// Connection established
+socket.on('connected', (data) => {
+  console.log('Connected:', data.message);
+  console.log('User ID:', data.userId);
+});
+
+// Handle disconnection
+socket.on('disconnect', (reason) => {
+  console.log('Disconnected:', reason);
+});
+```
+
+### Real-time Events
+
+#### 1. Balance Changes
+
+Emitted when wallet balance changes (after transactions):
+
+```javascript
+socket.on('balance:change', (event) => {
+  console.log('Balance updated:', event.data);
+  // {
+  //   walletId: "uuid",
+  //   sol: 1.5,
+  //   tokens: [
+  //     { mint: "...", amount: 100, decimals: 9 }
+  //   ],
+  //   timestamp: "2024-01-15T10:30:00Z"
+  // }
+});
+```
+
+#### 2. Portfolio Updates
+
+Emitted when portfolio summary is requested:
+
+```javascript
+socket.on('portfolio:update', (event) => {
+  console.log('Portfolio updated:', event.data);
+  // {
+  //   totalSol: 5.2,
+  //   totalTokens: 3,
+  //   wallets: [
+  //     {
+  //       walletId: "uuid",
+  //       publicKey: "...",
+  //       sol: 2.5,
+  //       tokens: [...]
+  //     }
+  //   ],
+  //   timestamp: "2024-01-15T10:30:00Z"
+  // }
+});
+```
+
+#### 3. Transaction Updates
+
+Emitted when transaction status changes:
+
+```javascript
+socket.on('transaction:update', (event) => {
+  console.log('Transaction updated:', event.data);
+  // {
+  //   id: "uuid",
+  //   signature: "...",
+  //   status: "confirmed",
+  //   type: "transfer_sol",
+  //   ...
+  // }
+});
+```
+
+#### 4. Approval Notifications
+
+Emitted when approval is required or processed:
+
+```javascript
+socket.on('approval:notification', (event) => {
+  console.log('Approval notification:', event.data);
+  // {
+  //   id: "uuid",
+  //   request_type: "large_transfer",
+  //   status: "pending",
+  //   ...
+  // }
+});
+```
+
+#### 5. NFT Updates
+
+Emitted when NFT portfolio changes:
+
+```javascript
+socket.on('nft:update', (event) => {
+  console.log('NFT updated:', event.data);
+  // {
+  //   mint_address: "...",
+  //   name: "My NFT",
+  //   image: "https://...",
+  //   ...
+  // }
+});
+```
+
+#### 6. Price Updates
+
+Broadcast to all clients when token prices change:
+
+```javascript
+socket.on('price:update', (event) => {
+  console.log('Price updated:', event.data);
+  // {
+  //   tokenMint: "So11111111111111111111111111111111111111112",
+  //   price: 150.25
+  // }
+});
+```
+
+### API Endpoints with Real-time Updates
+
+#### Get Portfolio Summary
+
+```javascript
+GET /api/v1/wallet/portfolio
+
+// Response
+{
+  "success": true,
+  "data": {
+    "totalSol": 5.2,
+    "totalTokens": 3,
+    "wallets": [
+      {
+        "walletId": "uuid",
+        "publicKey": "...",
+        "sol": 2.5,
+        "tokens": [
+          {
+            "mint": "...",
+            "amount": 100,
+            "decimals": 9
+          }
+        ]
+      }
+    ]
+  },
+  "message": "Portfolio summary retrieved and real-time update sent"
+}
+
+// Real-time update also sent via WebSocket to connected clients
+```
+
+### Channel Subscription
+
+Subscribe to specific channels for targeted updates:
+
+```javascript
+// Subscribe to a channel
+socket.emit('subscribe', { channel: 'prices' });
+
+socket.on('subscribed', (data) => {
+  console.log('Subscribed to:', data.channel);
+});
+
+// Unsubscribe from a channel
+socket.emit('unsubscribe', { channel: 'prices' });
+
+socket.on('unsubscribed', (data) => {
+  console.log('Unsubscribed from:', data.channel);
+});
+```
+
+### Connection Health Check
+
+Keep connection alive with ping/pong:
+
+```javascript
+// Send ping
+socket.emit('ping');
+
+// Receive pong
+socket.on('pong', (data) => {
+  console.log('Pong received:', data.timestamp);
+});
+```
+
+### Use Cases
+
+#### 1. Live Balance Display
+
+```javascript
+// Connect to WebSocket
+const socket = io(API_URL, { auth: { token } });
+
+// Listen for balance changes
+socket.on('balance:change', (event) => {
+  updateBalanceUI(event.data);
+});
+
+// Fetch initial balance
+fetch('/api/v1/wallet/:id/balance')
+  .then(res => res.json())
+  .then(data => updateBalanceUI(data.data));
+```
+
+#### 2. Transaction Monitoring
+
+```javascript
+// Listen for transaction updates
+socket.on('transaction:update', (event) => {
+  const tx = event.data;
+  
+  if (tx.status === 'confirmed') {
+    showNotification('Transaction confirmed!');
+    refreshBalance();
+  } else if (tx.status === 'failed') {
+    showNotification('Transaction failed', 'error');
+  }
+});
+```
+
+#### 3. Approval Notifications
+
+```javascript
+// Listen for approval requests
+socket.on('approval:notification', (event) => {
+  const approval = event.data;
+  
+  if (approval.status === 'pending') {
+    showApprovalDialog(approval);
+  } else if (approval.status === 'approved') {
+    showNotification('Approval processed');
+  }
+});
+```
+
+#### 4. Portfolio Dashboard
+
+```javascript
+// Get portfolio summary (triggers real-time update)
+fetch('/api/v1/wallet/portfolio')
+  .then(res => res.json())
+  .then(data => {
+    displayPortfolio(data.data);
+  });
+
+// Listen for portfolio updates
+socket.on('portfolio:update', (event) => {
+  displayPortfolio(event.data);
+});
+```
+
+### Error Handling
+
+```javascript
+// Handle connection errors
+socket.on('connect_error', (error) => {
+  console.error('Connection error:', error.message);
+  
+  if (error.message === 'Authentication token required') {
+    // Redirect to login
+  } else if (error.message === 'Invalid authentication token') {
+    // Refresh token and reconnect
+  }
+});
+
+// Handle disconnection
+socket.on('disconnect', (reason) => {
+  if (reason === 'io server disconnect') {
+    // Server disconnected, try to reconnect
+    socket.connect();
+  }
+  // else: client disconnected or network issue
+});
+```
+
+### Performance
+
+- **Connection overhead**: ~50ms initial connection
+- **Event latency**: <100ms from server to client
+- **Concurrent connections**: Supports 1000+ simultaneous connections
+- **Automatic reconnection**: Built-in with exponential backoff
+
+### Security
+
+- **JWT Authentication**: Required for all connections
+- **User isolation**: Users only receive their own updates
+- **Channel-based**: Targeted updates to specific users/channels
+- **Automatic cleanup**: Disconnected sockets cleaned up immediately
+
+Real-time updates provide instant feedback to users, improving UX significantly compared to polling-based approaches.
+
+
+---
+
+## Analytics & Enhanced Data (Helius Integration)
+
+The Ordo backend provides enhanced blockchain data and analytics through Helius API integration. This includes enriched transaction history, token metadata, NFT data, and address activity analysis.
+
+### Available Endpoints
+
+#### 1. Enhanced Transaction History
+```
+GET /api/v1/analytics/transactions/:address?limit=10
+```
+
+Get enriched transaction history with parsed data, including:
+- Transaction type classification
+- Native and token transfers
+- Account data changes
+- Event logs
+
+**Example:**
+```bash
+curl -X GET "https://api.ordo.com/api/v1/analytics/transactions/YOUR_ADDRESS?limit=20" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "address": "YOUR_ADDRESS",
+    "transactions": [
+      {
+        "signature": "5j7s...",
+        "timestamp": 1709123456,
+        "type": "SWAP",
+        "source": "Jupiter",
+        "fee": 5000,
+        "feePayer": "YOUR_ADDRESS",
+        "tokenTransfers": [
+          {
+            "fromUserAccount": "...",
+            "toUserAccount": "...",
+            "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            "tokenAmount": 100.5
+          }
+        ]
+      }
+    ],
+    "count": 20
+  }
+}
+```
+
+**Cache:** 5 minutes
+
+#### 2. Parsed Transaction by Signature
+```
+GET /api/v1/analytics/transaction/:signature
+```
+
+Get detailed parsed transaction data for a specific signature.
+
+**Example:**
+```bash
+curl -X GET "https://api.ordo.com/api/v1/analytics/transaction/5j7s..." \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### 3. Token Metadata
+```
+GET /api/v1/analytics/token/:mintAddress
+```
+
+Get comprehensive token metadata including:
+- On-chain metadata (name, symbol, decimals)
+- Off-chain metadata (image, description)
+- Token supply and authority info
+
+**Example:**
+```bash
+curl -X GET "https://api.ordo.com/api/v1/analytics/token/EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "account": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "onChainMetadata": {
+      "metadata": {
+        "name": "USD Coin",
+        "symbol": "USDC",
+        "decimals": 6
+      }
+    },
+    "offChainMetadata": {
+      "metadata": {
+        "image": "https://...",
+        "description": "..."
+      }
+    }
+  }
+}
+```
+
+**Cache:** 1 hour
+
+#### 4. NFTs by Owner
+```
+GET /api/v1/analytics/nfts/:address?limit=100
+```
+
+Get all NFTs owned by an address with full metadata.
+
+**Example:**
+```bash
+curl -X GET "https://api.ordo.com/api/v1/analytics/nfts/YOUR_ADDRESS?limit=50" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "address": "YOUR_ADDRESS",
+    "nfts": [
+      {
+        "id": "NFT_MINT_ADDRESS",
+        "content": {
+          "metadata": {
+            "name": "Cool NFT #123",
+            "symbol": "COOL",
+            "image": "https://..."
+          }
+        },
+        "ownership": {
+          "owner": "YOUR_ADDRESS"
+        }
+      }
+    ],
+    "count": 50
+  }
+}
+```
+
+**Cache:** 10 minutes
+
+#### 5. Token Balances with Metadata
+```
+GET /api/v1/analytics/balances/:address
+```
+
+Get all token balances with enriched metadata (name, symbol, image).
+
+**Example:**
+```bash
+curl -X GET "https://api.ordo.com/api/v1/analytics/balances/YOUR_ADDRESS" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "address": "YOUR_ADDRESS",
+    "balances": [
+      {
+        "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+        "amount": 1000.5,
+        "decimals": 6,
+        "metadata": {
+          "name": "USD Coin",
+          "symbol": "USDC",
+          "image": "https://..."
+        }
+      }
+    ],
+    "count": 5
+  }
+}
+```
+
+#### 6. Search Assets
+```
+GET /api/v1/analytics/search?q=QUERY&limit=20
+```
+
+Search for tokens and NFTs by name or symbol.
+
+**Example:**
+```bash
+curl -X GET "https://api.ordo.com/api/v1/analytics/search?q=USDC&limit=10" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+#### 7. Address Activity Summary
+```
+GET /api/v1/analytics/activity/:address
+```
+
+Get comprehensive activity summary for an address:
+- Total transaction count
+- Transaction type breakdown
+- Recent activity
+- First and last seen timestamps
+
+**Example:**
+```bash
+curl -X GET "https://api.ordo.com/api/v1/analytics/activity/YOUR_ADDRESS" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "data": {
+    "totalTransactions": 1234,
+    "types": {
+      "SWAP": 456,
+      "TRANSFER": 789,
+      "NFT_MINT": 12
+    },
+    "recentActivity": [...],
+    "firstSeen": 1700000000,
+    "lastSeen": 1709123456
+  }
+}
+```
+
+### AI Agent Actions
+
+The AI agent has access to analytics actions:
+
+1. **get_enhanced_transactions** - Get enriched transaction history
+2. **get_token_metadata** - Get detailed token metadata
+3. **get_nfts** - Get NFTs owned by address
+
+**Example AI Conversation:**
+```
+User: "Show me my recent transactions"
+Agent: [Calls get_enhanced_transactions with user's wallet address]
+Agent: "Here are your last 10 transactions:
+1. Swapped 100 USDC for 0.5 SOL on Jupiter (2 hours ago)
+2. Transferred 50 USDC to 7x8y... (5 hours ago)
+..."
+```
+
+### Caching Strategy
+
+To optimize performance and reduce API costs:
+
+- **Transaction data**: 5 minute cache
+- **Token metadata**: 1 hour cache
+- **NFT data**: 10 minute cache
+- **Automatic cleanup**: Expired entries removed every 5 minutes
+
+### Configuration
+
+Set your Helius API key in `.env`:
+```
+HELIUS_API_KEY=your_helius_api_key_here
+```
+
+Get your API key from: https://helius.dev
+
+### Performance
+
+- **Response time**: <200ms (cached), <1s (uncached)
+- **Rate limits**: Depends on Helius plan
+- **Concurrent requests**: Unlimited (cached responses)
+
+### Use Cases
+
+1. **Portfolio tracking**: Get all tokens and NFTs with metadata
+2. **Transaction history**: View enriched transaction details
+3. **Token discovery**: Search for tokens by name/symbol
+4. **Activity monitoring**: Track address activity patterns
+5. **NFT galleries**: Display user's NFT collection with images
+
+Analytics endpoints provide rich blockchain data that would be expensive to compute on-chain, enabling better UX and insights.
+
+
+---
+
+## Portfolio Analytics & Market Data
+
+The Ordo backend provides comprehensive portfolio analytics and market data through Birdeye API integration.
+
+### Portfolio Summary
+
+Get aggregated portfolio across all chains (Solana + EVM):
+
+```bash
+GET /api/v1/portfolio/summary
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": {
+    "totalValueUsd": 15234.56,
+    "solana": {
+      "sol": 10.5,
+      "tokens": [
+        {
+          "mint": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+          "symbol": "USDC",
+          "amount": 1000.5,
+          "valueUsd": 1000.5
+        }
+      ],
+      "nfts": {
+        "count": 5,
+        "estimatedValueSol": 2.5
+      }
+    },
+    "evm": {
+      "chains": [
+        {
+          "chainId": 1,
+          "chainName": "Ethereum",
+          "native": {
+            "symbol": "ETH",
+            "amount": 1.5,
+            "valueUsd": 4500
+          },
+          "tokens": []
+        }
+      ]
+    },
+    "lastUpdated": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+### Performance Metrics
+
+```bash
+GET /api/v1/portfolio/performance
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": {
+    "totalValueUsd": 15234.56,
+    "change24h": {
+      "absolute": 234.56,
+      "percentage": 1.56
+    },
+    "change7d": {
+      "absolute": 1234.56,
+      "percentage": 8.82
+    },
+    "topGainers": [],
+    "topLosers": []
+  }
+}
+```
+
+### Token Market Data
+
+```bash
+GET /api/v1/market/token/:address
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": {
+    "address": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+    "symbol": "USDC",
+    "name": "USD Coin",
+    "price": 1.0,
+    "priceChange24h": 0.01,
+    "volume24h": 1234567890,
+    "liquidity": 987654321,
+    "marketCap": 50000000000,
+    "holder": 1234567
+  }
+}
+```
+
+### Trending Tokens
+
+```bash
+GET /api/v1/market/trending?limit=20
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": [
+    {
+      "address": "...",
+      "symbol": "TOKEN",
+      "name": "Token Name",
+      "price": 1.23,
+      "priceChange24h": 15.5,
+      "volume24h": 1234567,
+      "rank": 1
+    }
+  ],
+  "count": 20
+}
+```
+
+### Price History
+
+```bash
+GET /api/v1/price/:address/history?timeframe=1D
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Timeframes: 1H, 4H, 1D, 1W, 1M
+
+# Response
+{
+  "success": true,
+  "data": {
+    "address": "...",
+    "items": [
+      {
+        "unixTime": 1705320000,
+        "value": 150.5
+      }
+    ]
+  }
+}
+```
+
+**Configuration:**
+Set `BIRDEYE_API_KEY` in `.env` to enable market data features.
+
+---
+
+## Cross-Chain Bridge
+
+Bridge assets between Solana and EVM chains using Wormhole, Mayan, or deBridge.
+
+### Get Bridge Quote
+
+```bash
+POST /api/v1/bridge/quote
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+
+{
+  "sourceChain": "solana",
+  "destinationChain": "ethereum",
+  "sourceToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "destinationToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  "amount": 100,
+  "protocol": "wormhole"
+}
+
+# Response
+{
+  "success": true,
+  "data": {
+    "protocol": "wormhole",
+    "sourceChain": "solana",
+    "destinationChain": "ethereum",
+    "inputAmount": 100,
+    "outputAmount": 99.8,
+    "estimatedTime": 300,
+    "fees": {
+      "bridgeFee": 0.2,
+      "gasFee": 0.001,
+      "total": 0.201
+    },
+    "route": ["solana", "wormhole", "ethereum"]
+  }
+}
+```
+
+### Execute Bridge
+
+```bash
+POST /api/v1/bridge/execute
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+
+{
+  "walletId": "uuid",
+  "sourceChain": "solana",
+  "destinationChain": "ethereum",
+  "sourceToken": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "destinationToken": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  "amount": 100,
+  "destinationAddress": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
+  "protocol": "wormhole"
+}
+
+# Response
+{
+  "success": true,
+  "data": {
+    "signature": "5j7s...",
+    "bridgeTxId": "wormhole_123...",
+    "status": "pending",
+    "sourceChain": "solana",
+    "destinationChain": "ethereum",
+    "estimatedCompletionTime": "2024-01-15T10:35:00Z"
+  }
+}
+```
+
+### Check Bridge Status
+
+```bash
+GET /api/v1/bridge/status/:txId?protocol=wormhole
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": {
+    "bridgeTxId": "wormhole_123...",
+    "status": "in_progress",
+    "sourceChain": "solana",
+    "destinationChain": "ethereum",
+    "sourceTxHash": "5j7s...",
+    "destinationTxHash": "0xabc...",
+    "progress": 75,
+    "estimatedTimeRemaining": 75
+  }
+}
+```
+
+### Supported Chains
+
+```bash
+GET /api/v1/bridge/supported-chains
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": [
+    {
+      "chainId": "solana",
+      "name": "Solana",
+      "nativeToken": "SOL",
+      "protocols": ["wormhole", "mayan", "debridge"]
+    },
+    {
+      "chainId": "ethereum",
+      "name": "Ethereum",
+      "nativeToken": "ETH",
+      "protocols": ["wormhole", "debridge"]
+    }
+  ]
+}
+```
+
+**AI Agent Actions:**
+- `get_bridge_quote` - Get bridge quote
+- `bridge_assets` - Execute bridge transaction
+- `get_bridge_status` - Check bridge status
+- `get_supported_chains` - List supported chains
+
+---
+
+## Liquidity Pool Operations
+
+Add and remove liquidity from DEX pools on Raydium, Meteora, and Orca.
+
+### Add Liquidity
+
+```bash
+POST /api/v1/liquidity/add
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+
+{
+  "walletId": "uuid",
+  "protocol": "raydium",
+  "tokenA": "So11111111111111111111111111111111111111112",
+  "tokenB": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+  "amountA": 1.0,
+  "amountB": 150.0,
+  "slippage": 1.0
+}
+
+# Response
+{
+  "success": true,
+  "data": {
+    "signature": "5j7s...",
+    "positionId": "uuid",
+    "lpTokens": 12.247
+  },
+  "message": "Liquidity added successfully"
+}
+```
+
+### Remove Liquidity
+
+```bash
+POST /api/v1/liquidity/remove
+Authorization: Bearer YOUR_JWT_TOKEN
+Content-Type: application/json
+
+{
+  "walletId": "uuid",
+  "positionId": "uuid",
+  "protocol": "raydium",
+  "percentage": 50
+}
+
+# Response
+{
+  "success": true,
+  "data": {
+    "signature": "5j7s...",
+    "amountA": 0.5,
+    "amountB": 75.0
+  },
+  "message": "Liquidity removed successfully"
+}
+```
+
+### Get Positions
+
+```bash
+GET /api/v1/liquidity/positions
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "protocol": "raydium",
+      "pool_address": "...",
+      "token_a": "So11111111111111111111111111111111111111112",
+      "token_b": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+      "amount_a": 1.0,
+      "amount_b": 150.0,
+      "lp_tokens": 12.247,
+      "initial_value_usd": 300.0,
+      "status": "active",
+      "created_at": "2024-01-15T10:00:00Z"
+    }
+  ],
+  "count": 1
+}
+```
+
+### Get Position Value
+
+```bash
+GET /api/v1/liquidity/position/:id/value
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": {
+    "positionId": "uuid",
+    "currentValueUsd": 315.0,
+    "tokenAAmount": 1.0,
+    "tokenBAmount": 150.0,
+    "feesEarnedUsd": 6.0,
+    "impermanentLoss": -3.0,
+    "impermanentLossPercentage": -1.0
+  }
+}
+```
+
+### Calculate Impermanent Loss
+
+```bash
+GET /api/v1/liquidity/position/:id/il
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": {
+    "impermanentLoss": -3.0,
+    "impermanentLossPercentage": -1.0
+  }
+}
+```
+
+**AI Agent Actions:**
+- `add_liquidity` - Add liquidity to pool
+- `remove_liquidity` - Remove liquidity from pool
+- `get_lp_positions` - Get all positions
+- `get_position_value` - Get position value
+- `calculate_impermanent_loss` - Calculate IL
+
+**Supported Protocols:**
+- Raydium (AMM)
+- Meteora (DLMM)
+- Orca (Whirlpools)
+
+**Important Notes:**
+- Impermanent loss is calculated based on price changes
+- Fees earned offset impermanent loss over time
+- Always check position value before removing liquidity
+- Use slippage tolerance to protect against price impact
+
+---
+
+## NFT Portfolio Management
+
+Track and manage NFT collections with automatic portfolio valuation.
+
+### Get User NFTs
+
+```bash
+GET /api/v1/nft/user?limit=100
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": [
+    {
+      "id": "uuid",
+      "mint_address": "...",
+      "name": "Cool NFT #123",
+      "symbol": "COOL",
+      "image": "https://...",
+      "metadata_uri": "https://...",
+      "last_price_sol": 2.5,
+      "acquired_at": "2024-01-15T10:00:00Z"
+    }
+  ],
+  "count": 5
+}
+```
+
+### Get Portfolio Value
+
+```bash
+GET /api/v1/nft/portfolio/value
+Authorization: Bearer YOUR_JWT_TOKEN
+
+# Response
+{
+  "success": true,
+  "data": {
+    "totalValue": 12.5,
+    "nftCount": 5
+  }
+}
+```
+
+**Features:**
+- Automatic tracking when minting NFTs
+- Portfolio value calculation
+- Collection statistics
+- Ownership verification before transfers
+
+---
+
+## Performance & Caching
+
+All services implement intelligent caching to optimize performance:
+
+**Cache TTLs:**
+- Price data: 1 minute
+- Market data: 5 minutes
+- Transaction history: 5 minutes
+- Token metadata: 1 hour
+- NFT data: 10 minutes
+
+**Benefits:**
+- Reduced API costs
+- Faster response times
+- Better user experience
+- Automatic cache cleanup
+
+**Cache Management:**
+- Automatic expiration
+- Background cleanup jobs
+- Manual cache clearing available
+- Per-service cache isolation
+

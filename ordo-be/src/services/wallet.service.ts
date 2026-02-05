@@ -7,6 +7,7 @@ import logger from '../config/logger';
 import { encryptPrivateKey, decryptPrivateKey } from '../utils/encryption';
 import { Wallet } from '../types';
 import { retryWithBackoff } from '../utils/retry';
+import realtimeService from './realtime.service';
 
 export class WalletService {
   private connection: Connection;
@@ -252,6 +253,90 @@ export class WalletService {
       return Keypair.fromSecretKey(secretKey);
     } catch (error) {
       logger.error('Get keypair error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get wallet balance and emit real-time update
+   */
+  async getWalletBalanceWithUpdate(
+    userId: string,
+    walletId: string
+  ): Promise<{ sol: number; tokens: any[] }> {
+    try {
+      const balance = await this.getWalletBalance(walletId);
+
+      // Emit real-time balance update
+      realtimeService.emitBalanceChange(userId, {
+        walletId,
+        sol: balance.sol,
+        tokens: balance.tokens,
+        timestamp: new Date().toISOString(),
+      });
+
+      return balance;
+    } catch (error) {
+      logger.error('Get wallet balance with update error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get portfolio summary for user (all wallets)
+   */
+  async getPortfolioSummary(userId: string): Promise<{
+    totalSol: number;
+    totalTokens: number;
+    wallets: Array<{
+      walletId: string;
+      publicKey: string;
+      sol: number;
+      tokens: any[];
+    }>;
+  }> {
+    try {
+      const wallets = await this.getUserWallets(userId);
+      
+      let totalSol = 0;
+      let totalTokens = 0;
+      const walletsWithBalance = [];
+
+      for (const wallet of wallets) {
+        try {
+          const balance = await this.getWalletBalance(wallet.id);
+          totalSol += balance.sol;
+          totalTokens += balance.tokens.length;
+
+          walletsWithBalance.push({
+            walletId: wallet.id,
+            publicKey: wallet.public_key,
+            sol: balance.sol,
+            tokens: balance.tokens,
+          });
+        } catch (error) {
+          logger.warn('Failed to get balance for wallet', {
+            walletId: wallet.id,
+            error,
+          });
+        }
+      }
+
+      const portfolio = {
+        totalSol,
+        totalTokens,
+        wallets: walletsWithBalance,
+      };
+
+      // Emit real-time portfolio update
+      realtimeService.emitPortfolioUpdate(userId, {
+        ...portfolio,
+        timestamp: new Date().toISOString(),
+      });
+
+      return portfolio;
+    } catch (error) {
+      logger.error('Get portfolio summary error:', error);
       throw error;
     }
   }

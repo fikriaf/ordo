@@ -20,8 +20,13 @@ const envSchema = z.object({
   SOLANA_RPC_URL: z.string().url(),
   SOLANA_NETWORK: z.enum(['mainnet-beta', 'devnet', 'testnet']).default('mainnet-beta'),
   
+  HELIUS_API_KEY: z.string().optional(),
+  BIRDEYE_API_KEY: z.string().optional(),
+  
   OPENROUTER_API_KEY: z.string().min(1),
   OPENROUTER_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),
+  
+  OPENAI_API_KEY: z.string().optional(),
   
   AI_MODELS: z.string().default('anthropic/claude-3.5-sonnet,openai/gpt-4-turbo'),
   

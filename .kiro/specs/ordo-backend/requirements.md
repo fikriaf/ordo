@@ -270,3 +270,140 @@ Key features:
 3. WHEN a health check is requested, THE Ordo_Backend SHALL verify OpenRouter API connectivity and return status
 4. WHEN any dependency is unhealthy, THE Ordo_Backend SHALL return 503 Service Unavailable with details
 5. THE Ordo_Backend SHALL provide a `/health` endpoint for basic checks and `/health/detailed` for comprehensive diagnostics
+
+### Requirement 21: EVM Wallet Management
+
+**User Story:** As a user, I want to create and manage EVM-compatible wallets (Ethereum, Polygon, BSC, etc.), so that I can perform cross-chain operations.
+
+#### Acceptance Criteria
+
+1. WHEN a user requests EVM wallet creation with a chain ID, THE Ordo_Backend SHALL generate a new Ethereum keypair and store it encrypted in the evm_wallets table
+2. WHEN a user requests EVM wallet import with a valid private key, THE Ordo_Backend SHALL encrypt and store the keypair for the specified chain
+3. WHEN retrieving EVM wallet data, THE Ordo_Backend SHALL decrypt the keypair only in memory and never expose private keys in API responses
+4. WHEN a user requests EVM wallet balance, THE Ordo_Backend SHALL query the chain-specific RPC and return native token and ERC-20 token balances
+5. THE Ordo_Backend SHALL use AES-256-GCM encryption for all stored EVM private keys (same as Solana wallets)
+6. THE Ordo_Backend SHALL support multiple EVM chains: Ethereum, Polygon, BSC, Arbitrum, Optimism, Avalanche
+7. WHEN a user transfers native tokens (ETH, MATIC, BNB), THE Ordo_Backend SHALL validate balance and execute the transfer via ethers.js
+8. WHEN a user transfers ERC-20 tokens, THE Ordo_Backend SHALL validate token balance and execute the transfer with proper gas estimation
+
+### Requirement 22: User Preferences and Risk Management
+
+**User Story:** As a user, I want to configure my risk preferences and trading limits, so that I can control the AI agent's autonomy level.
+
+#### Acceptance Criteria
+
+1. WHEN a new user is created, THE Ordo_Backend SHALL automatically create default user preferences with safe limits
+2. WHEN a user updates preferences, THE Ordo_Backend SHALL validate values against allowed ranges and reject invalid updates
+3. WHEN a transaction exceeds the user's approval threshold, THE Ordo_Backend SHALL create an approval request instead of executing immediately
+4. WHEN a user sets agent autonomy level to "low", THE Ordo_Backend SHALL require approval for all transactions
+5. WHEN a user sets agent autonomy level to "high", THE Ordo_Backend SHALL only require approval for transactions exceeding max_single_transfer_sol
+6. THE Ordo_Backend SHALL track daily transaction volume and prevent transactions that would exceed max_daily_volume_usdc
+
+### Requirement 23: Approval Queue (Human-in-the-Loop)
+
+**User Story:** As a user, I want to approve or reject high-risk transactions, so that I maintain control over my assets.
+
+#### Acceptance Criteria
+
+1. WHEN a transaction requires approval, THE Ordo_Backend SHALL create an approval request with transaction details, risk score, and agent reasoning
+2. WHEN an approval request is created, THE Ordo_Backend SHALL set an expiration time (default 15 minutes)
+3. WHEN a user approves a request, THE Ordo_Backend SHALL execute the pending transaction and update the approval status to "approved"
+4. WHEN a user rejects a request, THE Ordo_Backend SHALL cancel the transaction and update the approval status to "rejected"
+5. WHEN an approval request expires, THE Ordo_Backend SHALL automatically reject it and update the status to "expired"
+6. THE Ordo_Backend SHALL provide alternative options in approval requests when applicable (e.g., split large transfers)
+
+### Requirement 24: Token Risk Scoring
+
+**User Story:** As a user, I want to see risk scores for tokens, so that I can make informed decisions about trading.
+
+#### Acceptance Criteria
+
+1. WHEN a user requests a token risk score, THE Ordo_Backend SHALL fetch the score from Range Protocol Market Score API v1.8
+2. WHEN a token risk score is fetched, THE Ordo_Backend SHALL cache it for 1 hour to reduce API calls
+3. WHEN a token has a risk score above 70, THE Ordo_Backend SHALL flag it as high-risk and require approval for transactions
+4. WHEN displaying token information, THE Ordo_Backend SHALL include risk score, market score, liquidity score, and limiting factors
+5. THE Ordo_Backend SHALL automatically refresh token scores in the background for tokens in user portfolios
+
+### Requirement 25: Analytics and Enhanced Data (Helius)
+
+**User Story:** As a user, I want detailed transaction history and token metadata, so that I can track my blockchain activities comprehensively.
+
+#### Acceptance Criteria
+
+1. WHEN a user requests enhanced transactions, THE Ordo_Backend SHALL fetch parsed transaction data from Helius API with transaction types and token transfers
+2. WHEN a user requests token metadata, THE Ordo_Backend SHALL fetch on-chain and off-chain metadata from Helius DAS API
+3. WHEN a user requests NFT data, THE Ordo_Backend SHALL fetch NFT metadata including images, attributes, and ownership information
+4. WHEN a user requests address activity, THE Ordo_Backend SHALL aggregate transaction counts by type and return activity summary
+5. THE Ordo_Backend SHALL cache Helius API responses appropriately to reduce API usage and costs
+
+### Requirement 26: NFT Portfolio Management
+
+**User Story:** As a user, I want to manage my NFT collection, so that I can track, transfer, and value my NFTs.
+
+#### Acceptance Criteria
+
+1. WHEN a user mints an NFT, THE Ordo_Backend SHALL record the NFT in the user_nfts table with metadata
+2. WHEN a user requests their NFT portfolio, THE Ordo_Backend SHALL return all owned NFTs with images, metadata, and last known prices
+3. WHEN a user transfers an NFT, THE Ordo_Backend SHALL update the ownership record in the database
+4. WHEN a user requests NFT portfolio value, THE Ordo_Backend SHALL calculate total value based on floor prices and last sale prices
+5. THE Ordo_Backend SHALL track NFT collections with floor price, volume, and holder count statistics
+
+### Requirement 27: Real-time Updates via WebSocket
+
+**User Story:** As a user, I want real-time notifications for transaction status and approvals, so that I can respond quickly to important events.
+
+#### Acceptance Criteria
+
+1. WHEN a user connects via WebSocket, THE Ordo_Backend SHALL authenticate the connection using JWT token
+2. WHEN a transaction status changes, THE Ordo_Backend SHALL emit a real-time update to the connected user
+3. WHEN an approval request is created, THE Ordo_Backend SHALL emit a real-time notification to the user
+4. WHEN a user's portfolio balance changes significantly, THE Ordo_Backend SHALL emit a real-time update
+5. THE Ordo_Backend SHALL handle WebSocket reconnections gracefully and resume event subscriptions
+
+### Requirement 28: Agent Memory and Context Enhancement
+
+**User Story:** As a user, I want the AI agent to remember my preferences and past interactions, so that conversations feel more personalized and contextual.
+
+#### Acceptance Criteria
+
+1. WHEN a user interacts with the AI agent, THE Ordo_Backend SHALL store important information as agent memories with embeddings
+2. WHEN the AI agent needs context, THE Ordo_Backend SHALL retrieve relevant memories using semantic similarity search
+3. WHEN storing memories, THE Ordo_Backend SHALL assign importance scores to prioritize critical information
+4. WHEN a user makes decisions, THE Ordo_Backend SHALL log the decision with reasoning for future reference
+5. THE Ordo_Backend SHALL use vector embeddings (OpenAI/Cohere) for semantic memory retrieval
+
+### Requirement 29: Market Data and Portfolio Analytics
+
+**User Story:** As a user, I want to see market trends and portfolio analytics, so that I can make informed investment decisions.
+
+#### Acceptance Criteria
+
+1. WHEN a user requests portfolio summary, THE Ordo_Backend SHALL aggregate holdings across Solana and EVM chains with current values
+2. WHEN a user requests token analytics, THE Ordo_Backend SHALL fetch market data from Birdeye API (price, volume, market cap)
+3. WHEN a user requests trending tokens, THE Ordo_Backend SHALL return top tokens by volume and price change
+4. WHEN a user requests price history, THE Ordo_Backend SHALL return historical price data for charting
+5. THE Ordo_Backend SHALL cache market data appropriately to reduce API costs
+
+### Requirement 30: Webhook System
+
+**User Story:** As a user, I want to receive webhooks for important events, so that I can integrate Ordo with other systems.
+
+#### Acceptance Criteria
+
+1. WHEN a user configures a webhook URL, THE Ordo_Backend SHALL validate the URL and store the webhook configuration
+2. WHEN a transaction is confirmed, THE Ordo_Backend SHALL send a webhook notification to configured URLs
+3. WHEN an approval is required, THE Ordo_Backend SHALL send a webhook notification
+4. WHEN a webhook delivery fails, THE Ordo_Backend SHALL retry with exponential backoff (up to 3 attempts)
+5. THE Ordo_Backend SHALL verify webhook signatures to ensure authenticity
+
+### Requirement 31: Liquidity Pool Operations
+
+**User Story:** As a user, I want to add and remove liquidity from DEX pools, so that I can earn trading fees.
+
+#### Acceptance Criteria
+
+1. WHEN a user requests to add liquidity, THE Ordo_Backend SHALL calculate optimal token ratios and execute the operation via Raydium/Meteora
+2. WHEN a user requests to remove liquidity, THE Ordo_Backend SHALL withdraw LP tokens and return underlying assets
+3. WHEN a user requests LP position info, THE Ordo_Backend SHALL return current value, fees earned, and impermanent loss
+4. WHEN adding liquidity exceeds approval threshold, THE Ordo_Backend SHALL create an approval request
+5. THE Ordo_Backend SHALL support multiple DEX protocols (Raydium, Meteora, Orca)

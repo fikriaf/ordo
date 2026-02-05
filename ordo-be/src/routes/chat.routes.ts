@@ -124,9 +124,13 @@ router.post('/stream', async (req: AuthenticatedRequest, res: Response): Promise
     res.setHeader('Connection', 'keep-alive');
 
     let fullResponse = '';
+    const toolCalls: any[] = [];
 
-    // Stream AI response
-    for await (const chunk of aiAgentService.chatStream(
+    // Send start event
+    res.write(`data: ${JSON.stringify({ type: 'start' })}\n\n`);
+
+    // Stream AI response with tool events
+    for await (const event of aiAgentService.chatStream(
       validatedData.message,
       context,
       history.map((m) => ({
@@ -134,31 +138,64 @@ router.post('/stream', async (req: AuthenticatedRequest, res: Response): Promise
         content: m.content,
       }))
     )) {
-      fullResponse += chunk;
-      res.write(`data: ${JSON.stringify({ chunk })}\n\n`);
+      if (event.type === 'token') {
+        fullResponse += event.content;
+        res.write(`data: ${JSON.stringify({ type: 'token', content: event.content })}\n\n`);
+      } else if (event.type === 'tool_call') {
+        toolCalls.push({
+          id: event.toolId,
+          name: event.toolName,
+          arguments: event.arguments,
+        });
+        res.write(`data: ${JSON.stringify({ 
+          type: 'tool_call', 
+          toolId: event.toolId,
+          toolName: event.toolName,
+          arguments: event.arguments 
+        })}\n\n`);
+      } else if (event.type === 'tool_result') {
+        res.write(`data: ${JSON.stringify({ 
+          type: 'tool_result', 
+          toolId: event.toolId,
+          toolName: event.toolName,
+          result: event.result,
+          error: event.error 
+        })}\n\n`);
+      } else if (event.type === 'error') {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: event.error })}\n\n`);
+      }
     }
 
     // Save complete assistant response
-    await conversationService.saveMessage(conversation.id, 'assistant', fullResponse);
+    await conversationService.saveMessage(
+      conversation.id, 
+      'assistant', 
+      fullResponse,
+      toolCalls.length > 0 ? { toolCalls } : undefined
+    );
 
     // Send completion event
-    res.write(`data: ${JSON.stringify({ done: true, conversationId: conversation.id })}\n\n`);
+    res.write(`data: ${JSON.stringify({ 
+      type: 'done', 
+      conversationId: conversation.id,
+      toolCalls: toolCalls.length > 0 ? toolCalls : undefined
+    })}\n\n`);
     res.end();
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      res.write(`data: ${JSON.stringify({ error: 'Validation error', details: error.errors })}\n\n`);
+      res.write(`data: ${JSON.stringify({ type: 'error', error: 'Validation error', details: error.errors })}\n\n`);
       res.end();
       return;
     }
 
     logger.error('Chat stream error:', error);
-    res.write(`data: ${JSON.stringify({ error: error.message || 'Chat stream failed' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'error', error: error.message || 'Chat stream failed' })}\n\n`);
     res.end();
   }
 });
 
 // GET /api/v1/conversations - Get user conversations
-router.get('/conversations', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({
@@ -184,7 +221,7 @@ router.get('/conversations', async (req: AuthenticatedRequest, res: Response): P
 });
 
 // GET /api/v1/conversations/:id/messages - Get conversation messages
-router.get('/conversations/:id/messages', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+router.get('/:id/messages', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {
       res.status(401).json({

@@ -4,6 +4,7 @@ import supabase from '../config/database';
 import env from '../config/env';
 import logger from '../config/logger';
 import { Transaction } from '../types';
+import realtimeService from './realtime.service';
 
 export class TransactionService {
   private connection: Connection;
@@ -43,8 +44,11 @@ export class TransactionService {
 
       logger.info(`Transaction recorded: ${signature}`);
       
+      // Emit real-time update
+      realtimeService.emitTransactionUpdate(userId, transaction);
+      
       // Start polling for confirmation in background
-      this.pollTransactionStatus(transactionId, signature).catch(err => {
+      this.pollTransactionStatus(transactionId, signature, userId).catch(err => {
         logger.error('Transaction polling error:', err);
       });
 
@@ -55,7 +59,7 @@ export class TransactionService {
     }
   }
 
-  private async pollTransactionStatus(transactionId: string, signature: string): Promise<void> {
+  private async pollTransactionStatus(transactionId: string, signature: string, userId: string): Promise<void> {
     const maxAttempts = 30; // 30 attempts * 2 seconds = 1 minute
     let attempts = 0;
 
@@ -65,13 +69,13 @@ export class TransactionService {
 
         if (status.value?.confirmationStatus === 'confirmed' || 
             status.value?.confirmationStatus === 'finalized') {
-          await this.updateTransactionStatus(transactionId, 'confirmed');
+          await this.updateTransactionStatus(transactionId, 'confirmed', userId);
           logger.info(`Transaction confirmed: ${signature}`);
           return;
         }
 
         if (status.value?.err) {
-          await this.updateTransactionStatus(transactionId, 'failed');
+          await this.updateTransactionStatus(transactionId, 'failed', userId);
           logger.error(`Transaction failed: ${signature}`, status.value.err);
           return;
         }
@@ -86,23 +90,31 @@ export class TransactionService {
     }
 
     // Timeout - mark as failed
-    await this.updateTransactionStatus(transactionId, 'failed');
+    await this.updateTransactionStatus(transactionId, 'failed', userId);
     logger.warn(`Transaction timeout: ${signature}`);
   }
 
   async updateTransactionStatus(
     transactionId: string,
-    status: 'pending' | 'confirmed' | 'failed'
+    status: 'pending' | 'confirmed' | 'failed',
+    userId?: string
   ): Promise<void> {
     try {
-      const { error } = await supabase
+      const { data: transaction, error } = await supabase
         .from('transactions')
         .update({ status, updated_at: new Date().toISOString() })
-        .eq('id', transactionId);
+        .eq('id', transactionId)
+        .select()
+        .single();
 
       if (error) {
         logger.error('Failed to update transaction status:', error);
         throw new Error('Failed to update transaction status');
+      }
+
+      // Emit real-time update if userId is provided
+      if (userId && transaction) {
+        realtimeService.emitTransactionUpdate(userId, transaction);
       }
     } catch (error) {
       logger.error('Update transaction status error:', error);

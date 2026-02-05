@@ -1,8 +1,10 @@
+import { createServer } from 'http';
 import app from './app';
 import env from './config/env';
 import logger from './config/logger';
 import { testConnection } from './config/database';
 import { handleUnhandledRejection, handleUncaughtException } from './middleware/error-handler.middleware';
+import realtimeService from './services/realtime.service';
 
 // Set up global error handlers
 handleUnhandledRejection();
@@ -17,16 +19,27 @@ const startServer = async () => {
       process.exit(1);
     }
 
+    // Create HTTP server
+    const httpServer = createServer(app);
+
+    // Initialize WebSocket server
+    realtimeService.initialize(httpServer);
+
     // Start server
-    const server = app.listen(env.PORT, () => {
+    httpServer.listen(env.PORT, () => {
       logger.info(`Server running on port ${env.PORT} in ${env.NODE_ENV} mode`);
       logger.info(`API version: ${env.API_VERSION}`);
+      logger.info(`WebSocket server ready at ws://localhost:${env.PORT}/socket.io`);
     });
 
     // Graceful shutdown
     const shutdown = async () => {
       logger.info('Shutting down gracefully...');
-      server.close(() => {
+      
+      // Shutdown WebSocket server
+      realtimeService.shutdown();
+      
+      httpServer.close(() => {
         logger.info('Server closed');
         process.exit(0);
       });
