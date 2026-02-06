@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
+import '../services/api_client.dart';
+import '../services/auth_service.dart';
 
 class LendingPanel extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -18,7 +21,24 @@ class LendingPanel extends StatefulWidget {
 class _LendingPanelState extends State<LendingPanel> {
   final TextEditingController _amountController = TextEditingController();
   late String _selectedAsset;
+  String _selectedProtocol = 'kamino';
   bool _isLoading = false;
+  String? _errorMessage;
+  String? _successMessage;
+  
+  // APY rates for different protocols
+  final Map<String, double> _apyRates = {
+    'kamino': 6.5,
+    'marginfi': 5.8,
+    'solend': 6.2,
+  };
+  
+  // Protocol display names
+  final Map<String, String> _protocolNames = {
+    'kamino': 'Kamino Finance',
+    'marginfi': 'MarginFi',
+    'solend': 'Solend',
+  };
 
   @override
   void initState() {
@@ -28,6 +48,35 @@ class _LendingPanelState extends State<LendingPanel> {
     _selectedAsset = widget.data['asset']?.toString() ?? 
                      widget.data['token']?.toString() ?? 
                      'SOL';
+    _selectedProtocol = widget.data['protocol']?.toString().toLowerCase() ?? 'kamino';
+    
+    // Ensure valid protocol
+    if (!_apyRates.containsKey(_selectedProtocol)) {
+      _selectedProtocol = 'kamino';
+    }
+    
+    // Load APY rates from backend
+    _loadApyRates();
+  }
+  
+  Future<void> _loadApyRates() async {
+    try {
+      final authService = context.read<AuthService>();
+      final apiClient = ApiClient(authService: authService);
+      final response = await apiClient.get('/lend/rates');
+      
+      if (response['success'] == true && response['data'] != null) {
+        final data = response['data'] as Map<String, dynamic>;
+        setState(() {
+          if (data['kamino'] != null) _apyRates['kamino'] = (data['kamino'] as num).toDouble();
+          if (data['marginfi'] != null) _apyRates['marginfi'] = (data['marginfi'] as num).toDouble();
+          if (data['solend'] != null) _apyRates['solend'] = (data['solend'] as num).toDouble();
+        });
+      }
+    } catch (e) {
+      // Use default APY rates if API fails
+      print('Failed to load lending rates: $e');
+    }
   }
 
   @override
@@ -89,12 +138,59 @@ class _LendingPanelState extends State<LendingPanel> {
 
           // Content
           Container(
-            constraints: const BoxConstraints(maxHeight: 400),
+            constraints: const BoxConstraints(maxHeight: 500),
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Error/Success Message
+                  if (_errorMessage != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(color: Colors.red, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                  if (_successMessage != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _successMessage!,
+                              style: const TextStyle(color: Colors.green, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // Info Banner
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -198,6 +294,20 @@ class _LendingPanelState extends State<LendingPanel> {
 
                   const SizedBox(height: 20),
 
+                  // Protocol Selection
+                  Text(
+                    'Lending Protocol',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildProtocolSelector(),
+
+                  const SizedBox(height: 20),
+
                   // Lending Details
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -211,11 +321,11 @@ class _LendingPanelState extends State<LendingPanel> {
                     ),
                     child: Column(
                       children: [
-                        _buildDetailRow('Supply APY', widget.data['supplyApy']?.toString() ?? '--', Colors.green),
+                        _buildDetailRow('Supply APY', '${(_apyRates[_selectedProtocol] ?? 6.0).toStringAsFixed(1)}%', Colors.green),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Protocol', widget.data['protocol']?.toString() ?? '--'),
+                        _buildDetailRow('Protocol', _protocolNames[_selectedProtocol] ?? _selectedProtocol),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Collateral Factor', widget.data['collateralFactor']?.toString() ?? '--'),
+                        _buildDetailRow('Collateral Factor', widget.data['collateralFactor']?.toString() ?? '75%'),
                       ],
                     ),
                   ),
@@ -351,6 +461,104 @@ class _LendingPanelState extends State<LendingPanel> {
     );
   }
 
+  Widget _buildProtocolSelector() {
+    return Column(
+      children: _apyRates.keys.map((protocol) {
+        final isSelected = _selectedProtocol == protocol;
+        final apy = _apyRates[protocol] ?? 0.0;
+        
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedProtocol = protocol;
+            });
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isSelected 
+                  ? AppTheme.primary.withOpacity(0.1) 
+                  : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected 
+                    ? AppTheme.primary 
+                    : Colors.white.withOpacity(0.1),
+                width: isSelected ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: _getProtocolColors(protocol),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      protocol[0].toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _protocolNames[protocol] ?? protocol,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.white.withOpacity(0.8),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Supply APY: ${apy.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          color: Colors.green.withOpacity(0.8),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(
+                    Icons.check_circle,
+                    color: AppTheme.primary,
+                    size: 20,
+                  ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+  
+  List<Color> _getProtocolColors(String protocol) {
+    switch (protocol) {
+      case 'kamino':
+        return [const Color(0xFF667eea), const Color(0xFF764ba2)];
+      case 'marginfi':
+        return [const Color(0xFFFF6B6B), const Color(0xFFFFE66D)];
+      case 'solend':
+        return [const Color(0xFF10b77f), const Color(0xFF6567f1)];
+      default:
+        return [AppTheme.primary, AppTheme.primary];
+    }
+  }
+
   Widget _buildDetailRow(String label, String value, [Color? valueColor]) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -377,27 +585,91 @@ class _LendingPanelState extends State<LendingPanel> {
   void _handleLend() async {
     final amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid amount')),
-      );
+      setState(() {
+        _errorMessage = 'Please enter a valid amount';
+        _successMessage = null;
+      });
+      return;
+    }
+    
+    // Minimum lend amount
+    if (amount < 0.001) {
+      setState(() {
+        _errorMessage = 'Minimum lend amount is 0.001 $_selectedAsset';
+        _successMessage = null;
+      });
       return;
     }
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
+      _successMessage = null;
     });
 
-    // TODO: Implement actual lending via API
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lending request sent. Please wait for confirmation.')),
+    try {
+      final authService = context.read<AuthService>();
+      final apiClient = ApiClient(authService: authService);
+      
+      // Get primary wallet ID
+      final walletsResponse = await apiClient.getWallets();
+      if (walletsResponse['success'] != true || walletsResponse['data'] == null) {
+        throw Exception('Failed to get wallets');
+      }
+      
+      final wallets = walletsResponse['data'] as List;
+      if (wallets.isEmpty) {
+        throw Exception('No wallet found. Please create a wallet first.');
+      }
+      
+      // Find primary wallet or use first one
+      final primaryWallet = wallets.firstWhere(
+        (w) => w['isPrimary'] == true,
+        orElse: () => wallets.first,
       );
-      widget.onDismiss();
+      final walletId = primaryWallet['id'] as String;
+      
+      // Call lending API
+      final response = await apiClient.lend(
+        walletId: walletId,
+        amount: amount,
+        asset: _selectedAsset,
+        protocol: _selectedProtocol,
+      );
+      
+      if (response['success'] == true) {
+        final signature = response['data']?['signature'] ?? response['signature'];
+        setState(() {
+          _successMessage = 'Successfully supplied $amount $_selectedAsset to ${_protocolNames[_selectedProtocol]}!\nTx: ${_shortenSignature(signature?.toString() ?? '')}';
+          _errorMessage = null;
+        });
+        
+        // Dismiss after showing success
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          widget.onDismiss();
+        }
+      } else {
+        throw Exception(response['error'] ?? 'Lending failed');
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _successMessage = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+  
+  String _shortenSignature(String sig) {
+    if (sig.length > 20) {
+      return '${sig.substring(0, 8)}...${sig.substring(sig.length - 8)}';
+    }
+    return sig;
   }
 }

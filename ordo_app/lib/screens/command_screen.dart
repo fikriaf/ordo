@@ -17,17 +17,22 @@ import '../widgets/transaction_history_panel.dart';
 import '../widgets/settings_panel.dart';
 import '../widgets/nft_gallery_panel.dart';
 import '../widgets/staking_panel.dart';
+import '../widgets/unstake_panel.dart';
 import '../widgets/lending_panel.dart';
 import '../widgets/deposit_panel.dart';
 import '../widgets/borrowing_panel.dart';
 import '../widgets/liquidity_panel.dart';
 import '../widgets/bridge_panel.dart';
+import '../widgets/remove_liquidity_panel.dart';
 import '../widgets/send_panel.dart';
 import '../widgets/wallet_management_panel.dart';
 import '../widgets/approval_history_panel.dart';
 import '../widgets/ai_response_panel.dart';
 import '../widgets/network_settings_panel.dart';
 import '../widgets/faucet_panel.dart';
+import '../widgets/command_history_panel.dart';
+import '../widgets/analytics_panel.dart';
+import '../widgets/security_settings_panel.dart';
 import '../services/command_index.dart';
 import '../models/command_action.dart';
 import '../theme/app_theme.dart';
@@ -543,6 +548,13 @@ class _CommandScreenState extends State<CommandScreen> {
           onDismiss: () => controller.dismissPanel(),
         );
       
+      // Unstaking interface
+      case ActionType.unstake:
+        return UnstakePanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
+        );
+      
       // Lending interface - show placeholder
       case ActionType.lend:
         return LendingPanel(
@@ -564,6 +576,13 @@ class _CommandScreenState extends State<CommandScreen> {
           onDismiss: () => controller.dismissPanel(),
         );
       
+      // Remove Liquidity interface
+      case ActionType.removeLiquidity:
+        return RemoveLiquidityPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
+        );
+      
       // Bridge interface - show placeholder
       case ActionType.bridge:
         return BridgePanel(
@@ -577,6 +596,7 @@ class _CommandScreenState extends State<CommandScreen> {
       case ActionType.createWallet:
       case ActionType.importWallet:
       case ActionType.switchWallet:
+      case ActionType.deleteWallet:
         return WalletManagementPanel(
           data: action.data,
           initialTab: action.type == ActionType.manageEvmWallets ? 1 : 0,
@@ -590,32 +610,26 @@ class _CommandScreenState extends State<CommandScreen> {
           onDismiss: () => controller.dismissPanel(),
         );
       
-      // Command history - placeholder for now
+      // Command history panel
       case ActionType.showCommandHistory:
-        return _buildPlaceholderPanel(
-          'Command History',
-          'View your past commands and their results',
-          'history',
-          controller,
+        return CommandHistoryPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
         );
       
-      // Analytics - placeholder for now  
+      // Analytics panel
       case ActionType.showAnalytics:
       case ActionType.showActivity:
-        return _buildPlaceholderPanel(
-          'Analytics',
-          'View detailed wallet analytics and activity',
-          'bar_chart',
-          controller,
+        return AnalyticsPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
         );
       
-      // Security settings - placeholder for now
+      // Security settings panel
       case ActionType.showSecuritySettings:
-        return _buildPlaceholderPanel(
-          'Security & Limits',
-          'Configure transaction limits and security settings',
-          'shield',
-          controller,
+        return SecuritySettingsPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
         );
       
       // About panel

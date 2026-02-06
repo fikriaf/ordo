@@ -342,6 +342,84 @@ export class WalletService {
   }
 
   /**
+   * Delete a wallet for the user
+   */
+  async deleteWallet(userId: string, walletId: string): Promise<void> {
+    try {
+      // Verify wallet belongs to user
+      const { data: wallet, error: walletError } = await supabase
+        .from('wallets')
+        .select('id, is_primary, public_key')
+        .eq('id', walletId)
+        .eq('user_id', userId)
+        .single();
+
+      if (walletError || !wallet) {
+        throw new Error('Wallet not found or does not belong to user');
+      }
+
+      const wasPrimary = wallet.is_primary;
+      const deletedPublicKey = wallet.public_key;
+
+      // Delete the wallet
+      const { error: deleteError } = await supabase
+        .from('wallets')
+        .delete()
+        .eq('id', walletId)
+        .eq('user_id', userId);
+
+      if (deleteError) {
+        logger.error('Failed to delete wallet:', deleteError);
+        throw new Error('Failed to delete wallet');
+      }
+
+      // If the deleted wallet was primary, set another wallet as primary
+      if (wasPrimary) {
+        const { data: remainingWallets } = await supabase
+          .from('wallets')
+          .select('id')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (remainingWallets && remainingWallets.length > 0) {
+          await supabase
+            .from('wallets')
+            .update({ is_primary: true })
+            .eq('id', remainingWallets[0].id);
+          
+          logger.info(`New primary wallet set after deletion: ${remainingWallets[0].id}`);
+        }
+      }
+
+      logger.info(`Wallet deleted for user ${userId}: ${deletedPublicKey}`);
+    } catch (error) {
+      logger.error('Delete wallet error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete multiple wallets for the user (batch delete)
+   */
+  async deleteWallets(userId: string, walletIds: string[]): Promise<{ deleted: number; failed: string[] }> {
+    const failed: string[] = [];
+    let deleted = 0;
+
+    for (const walletId of walletIds) {
+      try {
+        await this.deleteWallet(userId, walletId);
+        deleted++;
+      } catch (error: any) {
+        logger.warn(`Failed to delete wallet ${walletId}:`, error.message);
+        failed.push(walletId);
+      }
+    }
+
+    return { deleted, failed };
+  }
+
+  /**
    * Set a wallet as the primary wallet for the user
    */
   async setPrimaryWallet(userId: string, walletId: string): Promise<void> {

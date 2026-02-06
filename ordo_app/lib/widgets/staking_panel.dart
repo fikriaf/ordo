@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
+import '../services/api_client.dart';
+import '../services/auth_service.dart';
 
 class StakingPanel extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -17,17 +20,41 @@ class StakingPanel extends StatefulWidget {
 
 class _StakingPanelState extends State<StakingPanel> {
   final TextEditingController _amountController = TextEditingController();
-  late String _selectedValidator;
+  String _selectedProtocol = 'marinade';
   bool _isLoading = false;
+  String? _errorMessage;
+  String? _successMessage;
+  
+  // APY rates for different protocols
+  final Map<String, double> _apyRates = {
+    'marinade': 7.2,
+    'jito': 7.8,
+    'sanctum': 8.1,
+  };
+  
+  // Protocol display names
+  final Map<String, String> _protocolNames = {
+    'marinade': 'Marinade Finance',
+    'jito': 'Jito',
+    'sanctum': 'Sanctum',
+  };
 
   @override
   void initState() {
     super.initState();
     final amount = widget.data['amount'] ?? '';
     _amountController.text = amount.toString();
-    _selectedValidator = widget.data['validator']?.toString() ?? 
-                         widget.data['protocol']?.toString() ?? 
-                         'Select Validator';
+    _selectedProtocol = widget.data['validator']?.toString().toLowerCase() ?? 
+                         widget.data['protocol']?.toString().toLowerCase() ?? 
+                         'marinade';
+    
+    // Ensure valid protocol
+    if (!_apyRates.containsKey(_selectedProtocol)) {
+      _selectedProtocol = 'marinade';
+    }
+    
+    // Load APY rates from backend
+    _loadApyRates();
   }
 
   @override
@@ -35,11 +62,33 @@ class _StakingPanelState extends State<StakingPanel> {
     _amountController.dispose();
     super.dispose();
   }
+  
+  Future<void> _loadApyRates() async {
+    try {
+      final authService = context.read<AuthService>();
+      final apiClient = ApiClient(authService: authService);
+      final response = await apiClient.getStakingApy();
+      
+      if (response['success'] == true && response['data'] != null) {
+        final data = response['data'] as Map<String, dynamic>;
+        setState(() {
+          if (data['marinade'] != null) _apyRates['marinade'] = (data['marinade'] as num).toDouble();
+          if (data['jito'] != null) _apyRates['jito'] = (data['jito'] as num).toDouble();
+          if (data['sanctum'] != null) _apyRates['sanctum'] = (data['sanctum'] as num).toDouble();
+        });
+      }
+    } catch (e) {
+      // Use default APY rates if API fails
+      print('Failed to load APY rates: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final availableBalance = widget.data['availableBalance'] ?? 0.0;
-    final estimatedApy = widget.data['apy'] ?? 0.0;
+    final availableBalance = (widget.data['availableBalance'] ?? widget.data['balance'] ?? 0.0) is num 
+        ? (widget.data['availableBalance'] ?? widget.data['balance'] ?? 0.0).toDouble() 
+        : 0.0;
+    final estimatedApy = _apyRates[_selectedProtocol] ?? 7.0;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
@@ -66,7 +115,7 @@ class _StakingPanelState extends State<StakingPanel> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
-                    Icons.account_balance_wallet,
+                    Icons.savings,
                     color: AppTheme.primary,
                     size: 24,
                   ),
@@ -98,39 +147,64 @@ class _StakingPanelState extends State<StakingPanel> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Status
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.1),
-                        width: 1,
+                  // Error/Success Message
+                  if (_errorMessage != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(color: Colors.red, fontSize: 13),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.green,
-                            shape: BoxShape.circle,
+                    
+                  if (_successMessage != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _successMessage!,
+                              style: const TextStyle(color: Colors.green, fontSize: 13),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Ready to Stake',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+
+                  // Protocol Selection
+                  Text(
+                    'Staking Protocol',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  _buildProtocolSelector(),
 
                   const SizedBox(height: 20),
 
@@ -194,7 +268,7 @@ class _StakingPanelState extends State<StakingPanel> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Available: ${availableBalance.toStringAsFixed(2)} SOL',
+                        'Available: ${availableBalance.toStringAsFixed(4)} SOL',
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.5),
                           fontSize: 12,
@@ -203,7 +277,9 @@ class _StakingPanelState extends State<StakingPanel> {
                       TextButton(
                         onPressed: () {
                           setState(() {
-                            _amountController.text = availableBalance.toStringAsFixed(2);
+                            // Leave some SOL for fees
+                            final maxAmount = (availableBalance - 0.01).clamp(0.0, availableBalance);
+                            _amountController.text = maxAmount.toStringAsFixed(4);
                           });
                         },
                         child: const Text(
@@ -216,71 +292,6 @@ class _StakingPanelState extends State<StakingPanel> {
                         ),
                       ),
                     ],
-                  ),
-
-                  const SizedBox(height: 20),
-
-                  // Validator Selection
-                  Text(
-                    'Validator',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.1),
-                        width: 1,
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF10b77f), Color(0xFF6567f1)],
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _selectedValidator,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                'APY: ${estimatedApy.toStringAsFixed(1)}%',
-                                style: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.chevron_right,
-                          color: Colors.white.withOpacity(0.3),
-                        ),
-                      ],
-                    ),
                   ),
 
                   const SizedBox(height: 20),
@@ -298,11 +309,13 @@ class _StakingPanelState extends State<StakingPanel> {
                     ),
                     child: Column(
                       children: [
-                        _buildSummaryRow('Estimated APY', '${estimatedApy.toStringAsFixed(1)}%'),
+                        _buildSummaryRow('Protocol', _protocolNames[_selectedProtocol] ?? _selectedProtocol),
                         const SizedBox(height: 12),
-                        _buildSummaryRow('Lock Period', widget.data['lockPeriod']?.toString() ?? 'Flexible'),
+                        _buildSummaryRow('Estimated APY', '${estimatedApy.toStringAsFixed(1)}%', Colors.green),
                         const SizedBox(height: 12),
-                        _buildSummaryRow('Rewards', widget.data['rewardsFrequency']?.toString() ?? 'Per Epoch'),
+                        _buildSummaryRow('Lock Period', 'Flexible (Liquid Staking)'),
+                        const SizedBox(height: 12),
+                        _buildSummaryRow('You will receive', _getStakedTokenName()),
                       ],
                     ),
                   ),
@@ -372,8 +385,119 @@ class _StakingPanelState extends State<StakingPanel> {
       ),
     );
   }
+  
+  Widget _buildProtocolSelector() {
+    return Column(
+      children: _apyRates.keys.map((protocol) {
+        final isSelected = _selectedProtocol == protocol;
+        final apy = _apyRates[protocol] ?? 0.0;
+        
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedProtocol = protocol;
+            });
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isSelected 
+                  ? AppTheme.primary.withOpacity(0.1) 
+                  : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected 
+                    ? AppTheme.primary 
+                    : Colors.white.withOpacity(0.1),
+                width: isSelected ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: _getProtocolColors(protocol),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      protocol[0].toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _protocolNames[protocol] ?? protocol,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.white.withOpacity(0.8),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'APY: ${apy.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          color: Colors.green.withOpacity(0.8),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(
+                    Icons.check_circle,
+                    color: AppTheme.primary,
+                    size: 20,
+                  ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+  
+  List<Color> _getProtocolColors(String protocol) {
+    switch (protocol) {
+      case 'marinade':
+        return [const Color(0xFF10b77f), const Color(0xFF6567f1)];
+      case 'jito':
+        return [const Color(0xFFFF6B6B), const Color(0xFFFFE66D)];
+      case 'sanctum':
+        return [const Color(0xFF667eea), const Color(0xFF764ba2)];
+      default:
+        return [AppTheme.primary, AppTheme.primary];
+    }
+  }
+  
+  String _getStakedTokenName() {
+    switch (_selectedProtocol) {
+      case 'marinade':
+        return 'mSOL';
+      case 'jito':
+        return 'JitoSOL';
+      case 'sanctum':
+        return 'scnSOL';
+      default:
+        return 'stSOL';
+    }
+  }
 
-  Widget _buildSummaryRow(String label, String value) {
+  Widget _buildSummaryRow(String label, String value, [Color? valueColor]) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -386,8 +510,8 @@ class _StakingPanelState extends State<StakingPanel> {
         ),
         Text(
           value,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: valueColor ?? Colors.white,
             fontSize: 14,
             fontWeight: FontWeight.w600,
           ),
@@ -399,28 +523,90 @@ class _StakingPanelState extends State<StakingPanel> {
   void _handleStake() async {
     final amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter a valid amount')),
-      );
+      setState(() {
+        _errorMessage = 'Please enter a valid amount';
+        _successMessage = null;
+      });
+      return;
+    }
+    
+    // Minimum stake amount
+    if (amount < 0.01) {
+      setState(() {
+        _errorMessage = 'Minimum stake amount is 0.01 SOL';
+        _successMessage = null;
+      });
       return;
     }
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
+      _successMessage = null;
     });
 
-    // TODO: Implement actual staking via API
-    // For now, show message that this needs backend integration
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Staking request sent. Please wait for confirmation.')),
+    try {
+      final authService = context.read<AuthService>();
+      final apiClient = ApiClient(authService: authService);
+      
+      // Get primary wallet ID
+      final walletsResponse = await apiClient.getWallets();
+      if (walletsResponse['success'] != true || walletsResponse['data'] == null) {
+        throw Exception('Failed to get wallets');
+      }
+      
+      final wallets = walletsResponse['data'] as List;
+      if (wallets.isEmpty) {
+        throw Exception('No wallet found. Please create a wallet first.');
+      }
+      
+      // Find primary wallet or use first one
+      final primaryWallet = wallets.firstWhere(
+        (w) => w['isPrimary'] == true,
+        orElse: () => wallets.first,
       );
-      widget.onDismiss();
+      final walletId = primaryWallet['id'] as String;
+      
+      // Call staking API
+      final response = await apiClient.stake(
+        walletId: walletId,
+        amount: amount,
+        protocol: _selectedProtocol,
+      );
+      
+      if (response['success'] == true) {
+        final signature = response['data']?['signature'] ?? response['signature'];
+        setState(() {
+          _successMessage = 'Successfully staked $amount SOL!\nTx: ${_shortenSignature(signature?.toString() ?? '')}';
+          _errorMessage = null;
+        });
+        
+        // Dismiss after showing success
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          widget.onDismiss();
+        }
+      } else {
+        throw Exception(response['error'] ?? 'Staking failed');
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _successMessage = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+  
+  String _shortenSignature(String sig) {
+    if (sig.length > 20) {
+      return '${sig.substring(0, 8)}...${sig.substring(sig.length - 8)}';
+    }
+    return sig;
   }
 }

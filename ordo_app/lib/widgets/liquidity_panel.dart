@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
+import '../services/api_client.dart';
+import '../services/auth_service.dart';
 
 class LiquidityPanel extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -20,7 +23,24 @@ class _LiquidityPanelState extends State<LiquidityPanel> {
   final TextEditingController _amount2Controller = TextEditingController();
   late String _token1;
   late String _token2;
+  String _selectedProtocol = 'raydium';
   bool _isLoading = false;
+  String? _errorMessage;
+  String? _successMessage;
+  
+  // Protocol APR rates
+  final Map<String, double> _aprRates = {
+    'raydium': 45.2,
+    'orca': 38.5,
+    'meteora': 52.8,
+  };
+  
+  // Protocol display names
+  final Map<String, String> _protocolNames = {
+    'raydium': 'Raydium',
+    'orca': 'Orca',
+    'meteora': 'Meteora',
+  };
 
   @override
   void initState() {
@@ -33,6 +53,12 @@ class _LiquidityPanelState extends State<LiquidityPanel> {
               'USDC';
     _amount1Controller.text = widget.data['amount1']?.toString() ?? '';
     _amount2Controller.text = widget.data['amount2']?.toString() ?? '';
+    _selectedProtocol = widget.data['protocol']?.toString().toLowerCase() ?? 'raydium';
+    
+    // Ensure valid protocol
+    if (!_aprRates.containsKey(_selectedProtocol)) {
+      _selectedProtocol = 'raydium';
+    }
   }
 
   @override
@@ -95,12 +121,59 @@ class _LiquidityPanelState extends State<LiquidityPanel> {
 
           // Content
           Container(
-            constraints: const BoxConstraints(maxHeight: 450),
+            constraints: const BoxConstraints(maxHeight: 550),
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Error/Success Message
+                  if (_errorMessage != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.red, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _errorMessage!,
+                              style: const TextStyle(color: Colors.red, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    
+                  if (_successMessage != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.check_circle_outline, color: Colors.green, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              _successMessage!,
+                              style: const TextStyle(color: Colors.green, fontSize: 13),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // Info Banner
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -181,6 +254,20 @@ class _LiquidityPanelState extends State<LiquidityPanel> {
 
                   const SizedBox(height: 20),
 
+                  // Protocol Selection
+                  Text(
+                    'Protocol',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.7),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  _buildProtocolSelector(),
+
+                  const SizedBox(height: 20),
+
                   // Pool Details
                   Container(
                     padding: const EdgeInsets.all(16),
@@ -194,13 +281,13 @@ class _LiquidityPanelState extends State<LiquidityPanel> {
                     ),
                     child: Column(
                       children: [
-                        _buildDetailRow('Pool', widget.data['pool']?.toString() ?? '--'),
+                        _buildDetailRow('Pool', '$_token1/$_token2'),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Fee Tier', widget.data['feeTier']?.toString() ?? '--'),
+                        _buildDetailRow('Protocol', _protocolNames[_selectedProtocol] ?? _selectedProtocol),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Est. APR', widget.data['estimatedApr']?.toString() ?? '--', Colors.green),
+                        _buildDetailRow('Est. APR', '${(_aprRates[_selectedProtocol] ?? 40.0).toStringAsFixed(1)}%', Colors.green),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Your Share', widget.data['yourShare']?.toString() ?? '0%'),
+                        _buildDetailRow('Fee Tier', widget.data['feeTier']?.toString() ?? '0.3%'),
                       ],
                     ),
                   ),
@@ -339,29 +426,187 @@ class _LiquidityPanelState extends State<LiquidityPanel> {
     );
   }
 
+  Widget _buildProtocolSelector() {
+    return Column(
+      children: _aprRates.keys.map((protocol) {
+        final isSelected = _selectedProtocol == protocol;
+        final apr = _aprRates[protocol] ?? 0.0;
+        
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedProtocol = protocol;
+            });
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: isSelected 
+                  ? Colors.blue.withOpacity(0.1) 
+                  : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected 
+                    ? Colors.blue 
+                    : Colors.white.withOpacity(0.1),
+                width: isSelected ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: _getProtocolColors(protocol),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      protocol[0].toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _protocolNames[protocol] ?? protocol,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.white.withOpacity(0.8),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        'Est. APR: ${apr.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          color: Colors.green.withOpacity(0.8),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(
+                    Icons.check_circle,
+                    color: Colors.blue,
+                    size: 20,
+                  ),
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+  
+  List<Color> _getProtocolColors(String protocol) {
+    switch (protocol) {
+      case 'raydium':
+        return [const Color(0xFF667eea), const Color(0xFF764ba2)];
+      case 'orca':
+        return [const Color(0xFF10b77f), const Color(0xFF6567f1)];
+      case 'meteora':
+        return [const Color(0xFFFF6B6B), const Color(0xFFFFE66D)];
+      default:
+        return [Colors.blue, Colors.blue];
+    }
+  }
+
   void _handleAddLiquidity() async {
-    if (_amount1Controller.text.isEmpty || _amount2Controller.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter amounts for both tokens')),
-      );
+    final amount1 = double.tryParse(_amount1Controller.text);
+    final amount2 = double.tryParse(_amount2Controller.text);
+    
+    if (amount1 == null || amount1 <= 0 || amount2 == null || amount2 <= 0) {
+      setState(() {
+        _errorMessage = 'Please enter valid amounts for both tokens';
+        _successMessage = null;
+      });
       return;
     }
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
+      _successMessage = null;
     });
 
-    // TODO: Implement actual liquidity addition via API
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Liquidity request sent. Please wait for confirmation.')),
+    try {
+      final authService = context.read<AuthService>();
+      final apiClient = ApiClient(authService: authService);
+      
+      // Get primary wallet ID
+      final walletsResponse = await apiClient.getWallets();
+      if (walletsResponse['success'] != true || walletsResponse['data'] == null) {
+        throw Exception('Failed to get wallets');
+      }
+      
+      final wallets = walletsResponse['data'] as List;
+      if (wallets.isEmpty) {
+        throw Exception('No wallet found. Please create a wallet first.');
+      }
+      
+      // Find primary wallet or use first one
+      final primaryWallet = wallets.firstWhere(
+        (w) => w['isPrimary'] == true,
+        orElse: () => wallets.first,
       );
-      widget.onDismiss();
+      final walletId = primaryWallet['id'] as String;
+      
+      // Call add liquidity API
+      final response = await apiClient.addLiquidity(
+        walletId: walletId,
+        tokenA: _token1,
+        tokenB: _token2,
+        amountA: amount1,
+        amountB: amount2,
+        protocol: _selectedProtocol,
+      );
+      
+      if (response['success'] == true) {
+        final signature = response['data']?['signature'] ?? response['signature'];
+        setState(() {
+          _successMessage = 'Successfully added liquidity to $_token1/$_token2 pool on ${_protocolNames[_selectedProtocol]}!\nTx: ${_shortenSignature(signature?.toString() ?? '')}';
+          _errorMessage = null;
+        });
+        
+        // Dismiss after showing success
+        await Future.delayed(const Duration(seconds: 2));
+        if (mounted) {
+          widget.onDismiss();
+        }
+      } else {
+        throw Exception(response['error'] ?? 'Add liquidity failed');
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+        _successMessage = null;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+  
+  String _shortenSignature(String sig) {
+    if (sig.length > 20) {
+      return '${sig.substring(0, 8)}...${sig.substring(sig.length - 8)}';
+    }
+    return sig;
   }
 }

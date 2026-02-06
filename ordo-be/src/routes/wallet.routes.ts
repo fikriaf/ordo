@@ -172,4 +172,43 @@ router.get('/portfolio', async (req: AuthenticatedRequest, res: Response): Promi
   }
 });
 
+// DELETE /api/v1/wallet/:id - Delete a wallet
+router.delete('/:id', async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({
+        success: false,
+        error: 'Authentication required',
+      });
+      return;
+    }
+
+    const walletId = req.params.id;
+    await walletService.deleteWallet(req.user.id, walletId);
+
+    // Get remaining wallets to return
+    const remainingWallets = await walletService.getUserWallets(req.user.id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Wallet deleted successfully',
+      data: {
+        deletedWalletId: walletId,
+        remainingWallets: remainingWallets.map((wallet) => ({
+          id: wallet.id,
+          publicKey: wallet.public_key,
+          isPrimary: wallet.is_primary,
+          createdAt: wallet.created_at,
+        })),
+      },
+    });
+  } catch (error: any) {
+    logger.error('Delete wallet route error:', error);
+    res.status(400).json({
+      success: false,
+      error: error.message || 'Failed to delete wallet',
+    });
+  }
+});
+
 export default router;

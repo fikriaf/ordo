@@ -37,6 +37,7 @@ enum ActionType {
   switchWallet,
   manageWallets,      // NEW: Show wallet management panel
   manageEvmWallets,   // NEW: EVM wallet operations
+  deleteWallet,       // NEW: Delete wallet operation
   
   // Settings
   showPreferences,
@@ -135,6 +136,8 @@ ActionType _mapBackendActionType(String? actionType) {
       return ActionType.manageWallets;
     case 'manage_evm_wallets':
       return ActionType.manageEvmWallets;
+    case 'delete_wallet':
+      return ActionType.deleteWallet;
     
     // Settings
     case 'show_preferences':
@@ -422,6 +425,8 @@ class CommandAction {
         return 'Wallet Created';
       case ActionType.manageEvmWallets:
         return 'EVM Wallet';
+      case ActionType.deleteWallet:
+        return 'Wallet Deleted';
       case ActionType.showNfts:
         return 'NFTs';
       case ActionType.showTransactions:
@@ -483,6 +488,8 @@ class CommandAction {
       case ActionType.createWallet:
       case ActionType.manageEvmWallets:
         return 'add_card';
+      case ActionType.deleteWallet:
+        return 'delete';
       case ActionType.showNfts:
         return 'collections';
       case ActionType.showTransactions:

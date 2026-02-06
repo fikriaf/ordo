@@ -4,111 +4,126 @@ import '../theme/app_theme.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
 
-class BridgePanel extends StatefulWidget {
+class UnstakePanel extends StatefulWidget {
   final Map<String, dynamic> data;
   final VoidCallback onDismiss;
 
-  const BridgePanel({
+  const UnstakePanel({
     super.key,
     required this.data,
     required this.onDismiss,
   });
 
   @override
-  State<BridgePanel> createState() => _BridgePanelState();
+  State<UnstakePanel> createState() => _UnstakePanelState();
 }
 
-class _BridgePanelState extends State<BridgePanel> {
+class _UnstakePanelState extends State<UnstakePanel> {
   final TextEditingController _amountController = TextEditingController();
-  final TextEditingController _toAddressController = TextEditingController();
-  late String _fromChain;
-  late String _toChain;
-  late String _token;
+  String _selectedProtocol = 'marinade';
   bool _isLoading = false;
-  bool _isLoadingQuote = false;
+  bool _isLoadingPositions = false;
   String? _errorMessage;
   String? _successMessage;
   
-  // Quote details
-  double? _estimatedReceive;
-  double? _bridgeFee;
-  String? _estimatedTime;
+  // User's staking positions
+  List<Map<String, dynamic>> _stakingPositions = [];
+  Map<String, dynamic>? _selectedPosition;
   
-  // Supported chains
-  final List<String> _supportedChains = ['Solana', 'Ethereum', 'Polygon', 'Arbitrum', 'BSC'];
+  // Protocol display names
+  final Map<String, String> _protocolNames = {
+    'marinade': 'Marinade Finance',
+    'jito': 'Jito',
+    'sanctum': 'Sanctum',
+  };
   
-  // Chain colors
-  final Map<String, Color> _chainColors = {
-    'Solana': const Color(0xFF9945FF),
-    'Ethereum': const Color(0xFF627EEA),
-    'Polygon': const Color(0xFF8247E5),
-    'Arbitrum': const Color(0xFF28A0F0),
-    'BSC': const Color(0xFFF0B90B),
+  // Staked token names
+  final Map<String, String> _stakedTokenNames = {
+    'marinade': 'mSOL',
+    'jito': 'JitoSOL',
+    'sanctum': 'scnSOL',
   };
 
   @override
   void initState() {
     super.initState();
-    _fromChain = widget.data['fromChain']?.toString() ?? 
-                 widget.data['sourceChain']?.toString() ?? 
-                 'Solana';
-    _toChain = widget.data['toChain']?.toString() ?? 
-               widget.data['destinationChain']?.toString() ?? 
-               'Ethereum';
-    _token = widget.data['token']?.toString() ?? 
-             widget.data['asset']?.toString() ?? 
-             'SOL';
-    _amountController.text = widget.data['amount']?.toString() ?? '';
-    _toAddressController.text = widget.data['toAddress']?.toString() ?? '';
+    final amount = widget.data['amount'] ?? '';
+    _amountController.text = amount.toString();
+    _selectedProtocol = widget.data['protocol']?.toString().toLowerCase() ?? 
+                        widget.data['validator']?.toString().toLowerCase() ?? 
+                        'marinade';
     
-    // Fetch quote if amount is provided
-    if (_amountController.text.isNotEmpty) {
-      _fetchQuote();
+    // Ensure valid protocol
+    if (!_protocolNames.containsKey(_selectedProtocol)) {
+      _selectedProtocol = 'marinade';
     }
+    
+    // Load user's staking positions
+    _loadStakingPositions();
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
   }
   
-  Future<void> _fetchQuote() async {
-    final amount = double.tryParse(_amountController.text);
-    if (amount == null || amount <= 0) return;
-    
+  Future<void> _loadStakingPositions() async {
     setState(() {
-      _isLoadingQuote = true;
+      _isLoadingPositions = true;
     });
     
     try {
       final authService = context.read<AuthService>();
       final apiClient = ApiClient(authService: authService);
       
-      final response = await apiClient.getBridgeQuote(
-        fromChain: _fromChain,
-        toChain: _toChain,
-        token: _token,
-        amount: amount,
-      );
-      
-      if (response['success'] == true && response['data'] != null) {
-        final data = response['data'] as Map<String, dynamic>;
-        setState(() {
-          _estimatedReceive = (data['estimatedReceive'] as num?)?.toDouble();
-          _bridgeFee = (data['fee'] as num?)?.toDouble();
-          _estimatedTime = data['estimatedTime']?.toString();
-        });
+      // Get primary wallet ID
+      final walletsResponse = await apiClient.getWallets();
+      if (walletsResponse['success'] == true && walletsResponse['data'] != null) {
+        final wallets = walletsResponse['data'] as List;
+        if (wallets.isNotEmpty) {
+          final primaryWallet = wallets.firstWhere(
+            (w) => w['isPrimary'] == true,
+            orElse: () => wallets.first,
+          );
+          final walletId = primaryWallet['id'] as String;
+          
+          final response = await apiClient.getStakingPositions(walletId);
+          if (response['success'] == true && response['data'] != null) {
+            setState(() {
+              _stakingPositions = List<Map<String, dynamic>>.from(response['data']);
+              
+              // Auto-select first position matching protocol
+              _selectedPosition = _stakingPositions.firstWhere(
+                (p) => p['protocol']?.toString().toLowerCase() == _selectedProtocol,
+                orElse: () => _stakingPositions.isNotEmpty ? _stakingPositions.first : {},
+              );
+              
+              if (_selectedPosition != null && _selectedPosition!.isNotEmpty) {
+                _selectedProtocol = _selectedPosition!['protocol']?.toString().toLowerCase() ?? _selectedProtocol;
+              }
+            });
+          }
+        }
       }
     } catch (e) {
-      // Silently fail quote, use defaults
-      print('Failed to fetch bridge quote: $e');
+      print('Failed to load staking positions: $e');
     } finally {
       setState(() {
-        _isLoadingQuote = false;
+        _isLoadingPositions = false;
       });
     }
   }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _toAddressController.dispose();
-    super.dispose();
+  
+  double get _availableToUnstake {
+    if (_selectedPosition != null && _selectedPosition!.isNotEmpty) {
+      return (_selectedPosition!['stakedAmount'] as num?)?.toDouble() ?? 0.0;
+    }
+    
+    // Sum positions for selected protocol
+    return _stakingPositions
+      .where((p) => p['protocol']?.toString().toLowerCase() == _selectedProtocol)
+      .fold(0.0, (sum, p) => sum + ((p['stakedAmount'] as num?)?.toDouble() ?? 0.0));
   }
 
   @override
@@ -134,19 +149,19 @@ class _BridgePanelState extends State<BridgePanel> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.purple.withOpacity(0.1),
+                    color: Colors.orange.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
-                    Icons.swap_horiz,
-                    color: Colors.purple,
+                    Icons.output,
+                    color: Colors.orange,
                     size: 24,
                   ),
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
                   child: Text(
-                    'Bridge Assets',
+                    'Unstake SOL',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 20,
@@ -164,7 +179,7 @@ class _BridgePanelState extends State<BridgePanel> {
 
           // Content
           Container(
-            constraints: const BoxConstraints(maxHeight: 550),
+            constraints: const BoxConstraints(maxHeight: 500),
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
@@ -221,10 +236,10 @@ class _BridgePanelState extends State<BridgePanel> {
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.purple.withOpacity(0.1),
+                      color: Colors.orange.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Colors.purple.withOpacity(0.2),
+                        color: Colors.orange.withOpacity(0.2),
                         width: 1,
                       ),
                     ),
@@ -232,13 +247,13 @@ class _BridgePanelState extends State<BridgePanel> {
                       children: [
                         const Icon(
                           Icons.info_outline,
-                          color: Colors.purple,
+                          color: Colors.orange,
                           size: 20,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'Transfer assets across different blockchains',
+                            'Unstake your liquid staked tokens to receive SOL',
                             style: TextStyle(
                               color: Colors.white.withOpacity(0.9),
                               fontSize: 13,
@@ -251,9 +266,9 @@ class _BridgePanelState extends State<BridgePanel> {
 
                   const SizedBox(height: 20),
 
-                  // From Chain
+                  // Protocol Selection
                   Text(
-                    'From',
+                    'Protocol',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 14,
@@ -261,45 +276,13 @@ class _BridgePanelState extends State<BridgePanel> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _buildChainSelector(_fromChain, Colors.green),
-
-                  const SizedBox(height: 16),
-
-                  // Swap Icon
-                  Center(
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.swap_vert,
-                        color: Colors.white.withOpacity(0.5),
-                        size: 20,
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 16),
-
-                  // To Chain
-                  Text(
-                    'To',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  _buildChainSelector(_toChain, Colors.blue),
+                  _buildProtocolSelector(),
 
                   const SizedBox(height: 20),
 
                   // Amount Input
                   Text(
-                    'Amount',
+                    'Amount to Unstake',
                     style: TextStyle(
                       color: Colors.white.withOpacity(0.7),
                       fontSize: 14,
@@ -320,9 +303,9 @@ class _BridgePanelState extends State<BridgePanel> {
                       hintStyle: TextStyle(
                         color: Colors.white.withOpacity(0.3),
                       ),
-                      suffixText: _token,
+                      suffixText: _stakedTokenNames[_selectedProtocol] ?? 'stSOL',
                       suffixStyle: const TextStyle(
-                        color: Colors.purple,
+                        color: Colors.orange,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -343,92 +326,68 @@ class _BridgePanelState extends State<BridgePanel> {
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: const BorderSide(
-                          color: Colors.purple,
+                          color: Colors.orange,
                           width: 2,
                         ),
                       ),
                     ),
                   ),
 
-                  const SizedBox(height: 20),
-                  
-                  // Destination Address Input
-                  Text(
-                    'Destination Address',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
                   const SizedBox(height: 8),
-                  TextField(
-                    controller: _toAddressController,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'Enter destination wallet address',
-                      hintStyle: TextStyle(
-                        color: Colors.white.withOpacity(0.3),
-                        fontSize: 14,
-                      ),
-                      filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: Colors.white.withOpacity(0.1),
+
+                  // Available Balance
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _isLoadingPositions 
+                            ? 'Loading...'
+                            : 'Available: ${_availableToUnstake.toStringAsFixed(4)} ${_stakedTokenNames[_selectedProtocol]}',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.5),
+                          fontSize: 12,
                         ),
                       ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(
-                          color: Colors.white.withOpacity(0.1),
+                      TextButton(
+                        onPressed: _availableToUnstake > 0 ? () {
+                          setState(() {
+                            _amountController.text = _availableToUnstake.toStringAsFixed(4);
+                          });
+                        } : null,
+                        child: const Text(
+                          'MAX',
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                          color: Colors.purple,
-                          width: 2,
-                        ),
-                      ),
-                    ),
+                    ],
                   ),
 
                   const SizedBox(height: 20),
 
-                  // Bridge Details
+                  // Summary
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
+                      color: Colors.orange.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.1),
+                        color: Colors.orange.withOpacity(0.2),
                         width: 1,
                       ),
                     ),
                     child: Column(
                       children: [
-                        _buildDetailRow('Route', '$_fromChain → $_toChain'),
+                        _buildSummaryRow('Protocol', _protocolNames[_selectedProtocol] ?? _selectedProtocol),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Est. Time', _estimatedTime ?? '5-10 min'),
+                        _buildSummaryRow('Token', _stakedTokenNames[_selectedProtocol] ?? 'stSOL'),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Bridge Fee', _bridgeFee != null ? '${_bridgeFee!.toStringAsFixed(4)} $_token' : '~0.1%'),
+                        _buildSummaryRow('Unstake Period', _getUnstakePeriod()),
                         const SizedBox(height: 12),
-                        _buildDetailRow(
-                          'You will receive', 
-                          _isLoadingQuote 
-                              ? 'Fetching...' 
-                              : _estimatedReceive != null 
-                                  ? '${_estimatedReceive!.toStringAsFixed(4)} $_token'
-                                  : '--',
-                          Colors.green,
-                        ),
+                        _buildSummaryRow('You will receive', 'SOL', Colors.green),
                       ],
                     ),
                   ),
@@ -464,9 +423,9 @@ class _BridgePanelState extends State<BridgePanel> {
                 Expanded(
                   flex: 2,
                   child: ElevatedButton(
-                    onPressed: _isLoading ? null : _handleBridge,
+                    onPressed: _isLoading ? null : _handleUnstake,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purple,
+                      backgroundColor: Colors.orange,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -483,7 +442,7 @@ class _BridgePanelState extends State<BridgePanel> {
                             ),
                           )
                         : const Text(
-                            'Bridge',
+                            'Unstake',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -498,59 +457,132 @@ class _BridgePanelState extends State<BridgePanel> {
       ),
     );
   }
-
-  Widget _buildChainSelector(String chain, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: Colors.white.withOpacity(0.1),
-          width: 1,
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 32,
-            height: 32,
+  
+  Widget _buildProtocolSelector() {
+    return Column(
+      children: _protocolNames.keys.map((protocol) {
+        final isSelected = _selectedProtocol == protocol;
+        final positionsForProtocol = _stakingPositions
+            .where((p) => p['protocol']?.toString().toLowerCase() == protocol)
+            .toList();
+        final stakedAmount = positionsForProtocol.fold(
+          0.0, 
+          (sum, p) => sum + ((p['stakedAmount'] as num?)?.toDouble() ?? 0.0)
+        );
+        
+        return GestureDetector(
+          onTap: () {
+            setState(() {
+              _selectedProtocol = protocol;
+              _selectedPosition = positionsForProtocol.isNotEmpty 
+                  ? positionsForProtocol.first 
+                  : null;
+            });
+          },
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
+              color: isSelected 
+                  ? Colors.orange.withOpacity(0.1) 
+                  : Colors.white.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected 
+                    ? Colors.orange 
+                    : Colors.white.withOpacity(0.1),
+                width: isSelected ? 2 : 1,
+              ),
             ),
-            child: Center(
-              child: Text(
-                chain[0],
-                style: TextStyle(
-                  color: color,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: _getProtocolColors(protocol),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: Text(
+                      protocol[0].toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _protocolNames[protocol] ?? protocol,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.white.withOpacity(0.8),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        _isLoadingPositions 
+                            ? 'Loading...'
+                            : 'Staked: ${stakedAmount.toStringAsFixed(4)} ${_stakedTokenNames[protocol]}',
+                        style: TextStyle(
+                          color: stakedAmount > 0 
+                              ? Colors.green.withOpacity(0.8) 
+                              : Colors.white.withOpacity(0.5),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (isSelected)
+                  const Icon(
+                    Icons.check_circle,
+                    color: Colors.orange,
+                    size: 20,
+                  ),
+              ],
             ),
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              chain,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-          Icon(
-            Icons.chevron_right,
-            color: Colors.white.withOpacity(0.3),
-          ),
-        ],
-      ),
+        );
+      }).toList(),
     );
   }
+  
+  List<Color> _getProtocolColors(String protocol) {
+    switch (protocol) {
+      case 'marinade':
+        return [const Color(0xFF10b77f), const Color(0xFF6567f1)];
+      case 'jito':
+        return [const Color(0xFFFF6B6B), const Color(0xFFFFE66D)];
+      case 'sanctum':
+        return [const Color(0xFF667eea), const Color(0xFF764ba2)];
+      default:
+        return [Colors.orange, Colors.orange];
+    }
+  }
+  
+  String _getUnstakePeriod() {
+    switch (_selectedProtocol) {
+      case 'marinade':
+        return 'Instant (Liquid)';
+      case 'jito':
+        return 'Instant (Liquid)';
+      case 'sanctum':
+        return 'Instant (Liquid)';
+      default:
+        return '~2-3 days';
+    }
+  }
 
-  Widget _buildDetailRow(String label, String value, [Color? valueColor]) {
+  Widget _buildSummaryRow(String label, String value, [Color? valueColor]) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -573,7 +605,7 @@ class _BridgePanelState extends State<BridgePanel> {
     );
   }
 
-  void _handleBridge() async {
+  void _handleUnstake() async {
     final amount = double.tryParse(_amountController.text);
     if (amount == null || amount <= 0) {
       setState(() {
@@ -583,17 +615,19 @@ class _BridgePanelState extends State<BridgePanel> {
       return;
     }
     
-    if (_toAddressController.text.isEmpty) {
+    // Check if user has enough staked
+    if (amount > _availableToUnstake) {
       setState(() {
-        _errorMessage = 'Please enter a destination address';
+        _errorMessage = 'Insufficient staked balance. Available: ${_availableToUnstake.toStringAsFixed(4)} ${_stakedTokenNames[_selectedProtocol]}';
         _successMessage = null;
       });
       return;
     }
     
-    if (_fromChain == _toChain) {
+    // Minimum unstake amount
+    if (amount < 0.001) {
       setState(() {
-        _errorMessage = 'Source and destination chains must be different';
+        _errorMessage = 'Minimum unstake amount is 0.001 ${_stakedTokenNames[_selectedProtocol]}';
         _successMessage = null;
       });
       return;
@@ -627,20 +661,18 @@ class _BridgePanelState extends State<BridgePanel> {
       );
       final walletId = primaryWallet['id'] as String;
       
-      // Call bridge API
-      final response = await apiClient.executeBridge(
+      // Call unstake API
+      final response = await apiClient.unstake(
         walletId: walletId,
-        fromChain: _fromChain,
-        toChain: _toChain,
-        token: _token,
         amount: amount,
-        toAddress: _toAddressController.text,
+        protocol: _selectedProtocol,
+        stakeAccountAddress: _selectedPosition?['stakeAccountAddress'] as String?,
       );
       
       if (response['success'] == true) {
-        final txId = response['data']?['txId'] ?? response['txId'];
+        final signature = response['data']?['signature'] ?? response['signature'];
         setState(() {
-          _successMessage = 'Bridge initiated! Transferring $amount $_token from $_fromChain to $_toChain.\nTx: ${_shortenSignature(txId?.toString() ?? '')}';
+          _successMessage = 'Successfully unstaked $amount ${_stakedTokenNames[_selectedProtocol]}!\nTx: ${_shortenSignature(signature?.toString() ?? '')}';
           _errorMessage = null;
         });
         
@@ -650,7 +682,7 @@ class _BridgePanelState extends State<BridgePanel> {
           widget.onDismiss();
         }
       } else {
-        throw Exception(response['error'] ?? 'Bridge failed');
+        throw Exception(response['error'] ?? 'Unstaking failed');
       }
     } catch (e) {
       setState(() {

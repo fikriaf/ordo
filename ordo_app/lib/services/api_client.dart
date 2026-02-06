@@ -579,6 +579,108 @@ class ApiClient {
   }
   
   // ============================================
+  // LIQUIDITY POOL OPERATIONS
+  // ============================================
+  
+  // Add liquidity to a pool
+  Future<Map<String, dynamic>> addLiquidity({
+    required String walletId,
+    required String tokenA,
+    required String tokenB,
+    required double amountA,
+    required double amountB,
+    required String protocol, // raydium, orca, meteora
+    double? slippage,
+  }) async {
+    return await post('/liquidity/add', {
+      'walletId': walletId,
+      'tokenA': tokenA,
+      'tokenB': tokenB,
+      'amountA': amountA,
+      'amountB': amountB,
+      'protocol': protocol,
+      if (slippage != null) 'slippage': slippage,
+    });
+  }
+  
+  // Remove liquidity from a pool
+  Future<Map<String, dynamic>> removeLiquidity({
+    required String walletId,
+    required String positionId,
+    required double percentage,
+    required String protocol,
+  }) async {
+    return await post('/liquidity/remove', {
+      'walletId': walletId,
+      'positionId': positionId,
+      'percentage': percentage,
+      'protocol': protocol,
+    });
+  }
+  
+  // Get user's liquidity positions
+  Future<Map<String, dynamic>> getLiquidityPositions() async {
+    return await get('/liquidity/positions');
+  }
+  
+  // Get position value
+  Future<Map<String, dynamic>> getLiquidityPositionValue(String positionId) async {
+    return await get('/liquidity/position/$positionId/value');
+  }
+  
+  // Calculate impermanent loss
+  Future<Map<String, dynamic>> calculateImpermanentLoss(String positionId) async {
+    return await get('/liquidity/position/$positionId/il');
+  }
+  
+  // ============================================
+  // BRIDGE OPERATIONS
+  // ============================================
+  
+  // Get bridge quote
+  Future<Map<String, dynamic>> getBridgeQuote({
+    required String fromChain,
+    required String toChain,
+    required String token,
+    required double amount,
+    String? toAddress,
+  }) async {
+    return await post('/bridge/quote', {
+      'fromChain': fromChain,
+      'toChain': toChain,
+      'token': token,
+      'amount': amount,
+      if (toAddress != null) 'toAddress': toAddress,
+    });
+  }
+  
+  // Execute bridge
+  Future<Map<String, dynamic>> executeBridge({
+    required String walletId,
+    required String fromChain,
+    required String toChain,
+    required String token,
+    required double amount,
+    required String toAddress,
+    double? slippage,
+  }) async {
+    return await post('/bridge/execute', {
+      'walletId': walletId,
+      'fromChain': fromChain,
+      'toChain': toChain,
+      'token': token,
+      'amount': amount,
+      'toAddress': toAddress,
+      if (slippage != null) 'slippage': slippage,
+    });
+  }
+  
+  // Get bridge status
+  Future<Map<String, dynamic>> getBridgeStatus(String txId) async {
+    return await get('/bridge/status/$txId');
+  }
+  
+  // ============================================
   // NFT OPERATIONS
   // ============================================
   

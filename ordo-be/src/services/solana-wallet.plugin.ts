@@ -253,6 +253,140 @@ const setPrimaryWalletAction: Action = {
   },
 };
 
+const deleteSolanaWalletAction: Action = {
+  name: 'delete_solana_wallet',
+  description: 'Delete a Solana wallet. Use with caution - this removes the wallet from the database.',
+  parameters: [
+    {
+      name: 'walletId',
+      type: 'string',
+      description: 'Wallet ID to delete',
+      required: true,
+    },
+  ],
+  examples: [
+    {
+      description: 'Delete a wallet by ID',
+      input: { walletId: 'uuid' },
+      output: {
+        success: true,
+        message: 'Wallet deleted successfully',
+      },
+    },
+  ],
+  handler: async (params, context) => {
+    try {
+      const { walletId } = params;
+
+      if (!walletId) {
+        throw new Error('Wallet ID is required');
+      }
+
+      await walletService.deleteWallet(context.userId, walletId);
+
+      return {
+        success: true,
+        message: 'Wallet deleted successfully',
+        chain: 'solana',
+        deletedWalletId: walletId,
+      };
+    } catch (error: any) {
+      logger.error('Delete Solana wallet action error:', error);
+      throw new Error(`Failed to delete wallet: ${error.message}`);
+    }
+  },
+};
+
+const deleteSolanaWalletsAction: Action = {
+  name: 'delete_solana_wallets',
+  description: 'Delete multiple Solana wallets at once. Use for batch deletion.',
+  parameters: [
+    {
+      name: 'walletIds',
+      type: 'array',
+      description: 'Array of wallet IDs to delete',
+      required: true,
+    },
+    {
+      name: 'keepWalletId',
+      type: 'string',
+      description: 'Optional - wallet ID to keep (useful for "delete all except" operations)',
+      required: false,
+    },
+  ],
+  examples: [
+    {
+      description: 'Delete multiple wallets',
+      input: { walletIds: ['uuid1', 'uuid2'] },
+      output: {
+        success: true,
+        deleted: 2,
+        message: '2 wallets deleted successfully',
+      },
+    },
+    {
+      description: 'Delete all wallets except one',
+      input: { walletIds: ['uuid1', 'uuid2', 'uuid3'], keepWalletId: 'uuid1' },
+      output: {
+        success: true,
+        deleted: 2,
+        kept: 'uuid1',
+        message: '2 wallets deleted, 1 wallet kept',
+      },
+    },
+  ],
+  handler: async (params, context) => {
+    try {
+      let { walletIds, keepWalletId } = params;
+
+      if (!walletIds || !Array.isArray(walletIds) || walletIds.length === 0) {
+        // If no specific walletIds provided, get all user wallets
+        const allWallets = await walletService.getUserWallets(context.userId);
+        walletIds = allWallets.map((w: any) => w.id);
+      }
+
+      // Filter out the wallet to keep
+      if (keepWalletId) {
+        walletIds = walletIds.filter((id: string) => id !== keepWalletId);
+      }
+
+      if (walletIds.length === 0) {
+        return {
+          success: true,
+          deleted: 0,
+          kept: keepWalletId,
+          message: 'No wallets to delete',
+          chain: 'solana',
+        };
+      }
+
+      const result = await walletService.deleteWallets(context.userId, walletIds);
+
+      // Get remaining wallets
+      const remainingWallets = await walletService.getUserWallets(context.userId);
+
+      return {
+        success: true,
+        deleted: result.deleted,
+        failed: result.failed.length > 0 ? result.failed : undefined,
+        kept: keepWalletId,
+        remainingWallets: remainingWallets.map((w: any) => ({
+          id: w.id,
+          publicKey: w.public_key,
+          isPrimary: w.is_primary,
+        })),
+        message: keepWalletId 
+          ? `${result.deleted} wallet(s) deleted, 1 wallet kept`
+          : `${result.deleted} wallet(s) deleted successfully`,
+        chain: 'solana',
+      };
+    } catch (error: any) {
+      logger.error('Delete Solana wallets action error:', error);
+      throw new Error(`Failed to delete wallets: ${error.message}`);
+    }
+  },
+};
+
 // =============================================
 // PLUGIN DEFINITION
 // =============================================
@@ -260,7 +394,7 @@ const setPrimaryWalletAction: Action = {
 const solanaWalletPlugin: Plugin = {
   id: 'solana-wallet',
   name: 'Solana Wallet Operations',
-  description: 'Solana wallet management including create, import, balance, and listing wallets',
+  description: 'Solana wallet management including create, import, delete, balance, and listing wallets',
   version: '1.0.0',
   isEnabled: true,
   actions: [
@@ -269,6 +403,8 @@ const solanaWalletPlugin: Plugin = {
     getSolanaBalanceAction,
     listSolanaWalletsAction,
     setPrimaryWalletAction,
+    deleteSolanaWalletAction,
+    deleteSolanaWalletsAction,
   ],
 };
 

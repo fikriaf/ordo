@@ -41,6 +41,7 @@ export type ActionType =
   | 'switch_wallet'
   | 'manage_wallets'
   | 'manage_evm_wallets'
+  | 'delete_wallet'
   // Settings
   | 'show_preferences'
   | 'set_limit'
@@ -166,6 +167,8 @@ const TOOL_ACTION_MAP: Record<string, ActionType> = {
   'get_solana_balance': 'check_balance',
   'list_solana_wallets': 'manage_wallets',
   'set_primary_solana_wallet': 'manage_wallets',
+  'delete_solana_wallet': 'delete_wallet',
+  'delete_solana_wallets': 'delete_wallet',
   'create_evm_wallet': 'manage_evm_wallets',
   'get_evm_balance': 'check_balance',
   'list_evm_wallets': 'manage_evm_wallets',
@@ -257,6 +260,9 @@ function getActionTypeFromTool(toolName: string): ActionType {
   if (lowerName.includes('faucet') || lowerName.includes('airdrop')) {
     return 'faucet';
   }
+  if (lowerName.includes('delete') && lowerName.includes('wallet')) {
+    return 'delete_wallet';
+  }
   
   return 'info';
 }
@@ -288,6 +294,13 @@ function detectActionTypeFromMessage(message: string): ActionType {
   if (lowerMessage.includes('wallet') && 
       (lowerMessage.includes('create') || lowerMessage.includes('buat'))) {
     return 'create_wallet';
+  }
+  
+  // Delete wallet detection
+  if (lowerMessage.includes('wallet') && 
+      (lowerMessage.includes('delete') || lowerMessage.includes('hapus') || 
+       lowerMessage.includes('remove') || lowerMessage.includes('removed'))) {
+    return 'delete_wallet';
   }
   
   // Balance check
@@ -676,6 +689,21 @@ function generateSummary(
         }
       }
       return 'Wallet operation completed';
+    }
+    
+    case 'delete_wallet': {
+      const deleteResult = toolResults.find(t => t.result?.deleted !== undefined || t.result?.deletedWalletId);
+      if (deleteResult?.result) {
+        const r = deleteResult.result;
+        if (r.deleted !== undefined) {
+          const kept = r.kept ? ', 1 kept' : '';
+          return `${r.deleted} wallet(s) deleted${kept}`;
+        }
+        if (r.deletedWalletId) {
+          return 'Wallet deleted successfully';
+        }
+      }
+      return 'Wallet deleted';
     }
     
     case 'token_price': {
