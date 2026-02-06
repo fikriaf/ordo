@@ -5,6 +5,7 @@ import { AuthenticatedRequest } from '../types';
 import aiAgentService from '../services/ai-agent.service';
 import conversationService from '../services/conversation.service';
 import logger from '../config/logger';
+import { parseResponse, parseToolEvent } from '../utils/response-parser';
 
 const router = Router();
 
@@ -64,13 +65,16 @@ router.post('/', async (req: AuthenticatedRequest, res: Response): Promise<void>
       result.toolCalls ? { toolCalls: result.toolCalls } : undefined
     );
 
+    // Parse response into structured format
+    const structuredResponse = parseResponse(
+      conversation.id,
+      result.response,
+      result.toolCalls || []
+    );
+
     res.status(200).json({
       success: true,
-      data: {
-        conversationId: conversation.id,
-        message: result.response,
-        toolCalls: result.toolCalls,
-      },
+      data: structuredResponse,
     });
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -125,6 +129,7 @@ router.post('/stream', async (req: AuthenticatedRequest, res: Response): Promise
 
     let fullResponse = '';
     const toolCalls: any[] = [];
+    const toolResults: any[] = [];
 
     // Send start event
     res.write(`data: ${JSON.stringify({ type: 'start' })}\n\n`);
@@ -154,12 +159,27 @@ router.post('/stream', async (req: AuthenticatedRequest, res: Response): Promise
           arguments: event.arguments 
         })}\n\n`);
       } else if (event.type === 'tool_result') {
+        // Collect tool result for final parsing
+        toolResults.push({
+          id: event.toolId,
+          name: event.toolName,
+          result: event.error ? undefined : event.result,
+          error: event.error ? event.result : undefined,
+        });
+        
+        // Parse tool event for real-time structured update
+        const parsedEvent = parseToolEvent(event.toolName, event.result, event.error);
+        
         res.write(`data: ${JSON.stringify({ 
           type: 'tool_result', 
           toolId: event.toolId,
           toolName: event.toolName,
           result: event.result,
-          error: event.error 
+          error: event.error,
+          // Add parsed structured data
+          actionType: parsedEvent.actionType,
+          status: parsedEvent.status,
+          partialDetails: parsedEvent.partialDetails,
         })}\n\n`);
       } else if (event.type === 'error') {
         res.write(`data: ${JSON.stringify({ type: 'error', error: event.error })}\n\n`);
@@ -174,11 +194,17 @@ router.post('/stream', async (req: AuthenticatedRequest, res: Response): Promise
       toolCalls.length > 0 ? { toolCalls } : undefined
     );
 
-    // Send completion event
+    // Parse final response into structured format
+    const structuredResponse = parseResponse(
+      conversation.id,
+      fullResponse,
+      toolResults
+    );
+
+    // Send completion event with structured response
     res.write(`data: ${JSON.stringify({ 
       type: 'done', 
-      conversationId: conversation.id,
-      toolCalls: toolCalls.length > 0 ? toolCalls : undefined
+      ...structuredResponse,
     })}\n\n`);
     res.end();
   } catch (error: any) {
