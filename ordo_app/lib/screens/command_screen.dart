@@ -15,6 +15,12 @@ import '../widgets/swap_panel.dart';
 import '../widgets/token_risk_panel.dart';
 import '../widgets/transaction_history_panel.dart';
 import '../widgets/settings_panel.dart';
+import '../widgets/nft_gallery_panel.dart';
+import '../widgets/staking_panel.dart';
+import '../widgets/lending_panel.dart';
+import '../widgets/borrowing_panel.dart';
+import '../widgets/liquidity_panel.dart';
+import '../widgets/bridge_panel.dart';
 import '../services/command_index.dart';
 import '../models/command_action.dart';
 import '../theme/app_theme.dart';
@@ -502,56 +508,44 @@ class _CommandScreenState extends State<CommandScreen> {
       
       // NFT Gallery - show placeholder for now
       case ActionType.showNfts:
-        return _buildPlaceholderPanel(
-          'NFT Gallery',
-          'Your NFT collection will appear here',
-          'gallery',
-          controller,
+        return NftGalleryPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
         );
       
       // Staking interface - show placeholder
       case ActionType.stake:
-        return _buildPlaceholderPanel(
-          'Staking',
-          'Stake your SOL to earn rewards',
-          'coins',
-          controller,
+        return StakingPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
         );
       
       // Lending interface - show placeholder
       case ActionType.lend:
-        return _buildPlaceholderPanel(
-          'Lending',
-          'Lend your assets to earn interest',
-          'hand_coins',
-          controller,
+        return LendingPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
         );
       
       // Borrowing interface - show placeholder
       case ActionType.borrow:
-        return _buildPlaceholderPanel(
-          'Borrowing',
-          'Borrow assets against your collateral',
-          'hand_coins',
-          controller,
+        return BorrowingPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
         );
       
       // Liquidity interface - show placeholder
       case ActionType.addLiquidity:
-        return _buildPlaceholderPanel(
-          'Liquidity Pool',
-          'Add liquidity to earn trading fees',
-          'droplet',
-          controller,
+        return LiquidityPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
         );
       
       // Bridge interface - show placeholder
       case ActionType.bridge:
-        return _buildPlaceholderPanel(
-          'Bridge',
-          'Transfer assets across chains',
-          'bridge',
-          controller,
+        return BridgePanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
         );
       
       // Token price/info - show in info panel
