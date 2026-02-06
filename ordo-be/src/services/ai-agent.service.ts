@@ -205,10 +205,18 @@ export class AIAgentService {
     // Get local plugin tools
     const pluginTools = this.getToolsFromPlugins();
 
-    // Get remote MCP tools
+    // Get remote MCP tools with strict timeout (5 seconds max)
     let mcpTools: any[] = [];
     try {
-      const mcpToolsList = await mcpClientService.getAvailableTools();
+      const MCP_TOOLS_TIMEOUT = 5000; // 5 seconds max for MCP tools
+      
+      const mcpToolsList = await Promise.race([
+        mcpClientService.getAvailableTools(),
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('MCP tools fetch timeout')), MCP_TOOLS_TIMEOUT)
+        )
+      ]);
+      
       mcpTools = mcpToolsList.map((tool: Tool) => ({
         type: 'function',
         function: {
@@ -218,7 +226,7 @@ export class AIAgentService {
         },
       }));
     } catch (error: any) {
-      logger.error('Failed to fetch MCP tools, continuing with plugin tools only', {
+      logger.warn('Failed to fetch MCP tools (timeout or error), continuing with plugin tools only', {
         error: error.message,
       });
     }
