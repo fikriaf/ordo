@@ -10,15 +10,41 @@ import logger from '../config/logger';
  * 2. Detects and logs potential SQL injection attempts
  * 3. Detects and logs potential XSS attempts
  * 4. Rejects requests with malicious payloads
+ * 
+ * NOTE: Chat/AI routes are excluded from SQL keyword checks since natural language
+ * messages may contain words like "create", "delete", "update" legitimately.
  */
 
-// Patterns that indicate potential SQL injection
-const SQL_INJECTION_PATTERNS = [
+// Routes that should skip strict SQL keyword checking (natural language input)
+const NATURAL_LANGUAGE_ROUTES = [
+  '/api/v1/chat',
+  '/api/v1/conversations',
+];
+
+// Patterns that indicate potential SQL injection (STRICT - for form inputs)
+const SQL_INJECTION_PATTERNS_STRICT = [
   /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|DECLARE)\b)/gi,
   /(--|\;|\/\*|\*\/)/g,
   /(\bOR\b.*=.*)/gi,
   /(\bAND\b.*=.*)/gi,
   /(\'|\")(\s)*(OR|AND)(\s)*(\d+)(\s)*=(\s)*(\d+)/gi,
+];
+
+// Patterns for natural language routes - only catch obvious injection attempts
+const SQL_INJECTION_PATTERNS_RELAXED = [
+  // Only catch combined SQL patterns that look like actual injection
+  /(\bSELECT\b.*\bFROM\b)/gi,
+  /(\bINSERT\b.*\bINTO\b)/gi,
+  /(\bUPDATE\b.*\bSET\b)/gi,
+  /(\bDELETE\b.*\bFROM\b)/gi,
+  /(\bDROP\b.*\b(TABLE|DATABASE)\b)/gi,
+  /(\bUNION\b.*\bSELECT\b)/gi,
+  // SQL comment injection
+  /(--\s*$|\/\*.*\*\/)/g,
+  // Classic injection patterns
+  /(\'|\")(\s)*(OR|AND)(\s)*(\d+)(\s)*=(\s)*(\d+)/gi,
+  /(\bOR\b\s+1\s*=\s*1)/gi,
+  /(\bAND\b\s+1\s*=\s*1)/gi,
 ];
 
 // Patterns that indicate potential XSS attacks
@@ -34,9 +60,16 @@ const XSS_PATTERNS = [
 
 /**
  * Check if a string contains SQL injection patterns
+ * @param value - The string to check
+ * @param relaxed - Use relaxed patterns for natural language input
  */
-function containsSQLInjection(value: string): boolean {
-  return SQL_INJECTION_PATTERNS.some(pattern => pattern.test(value));
+function containsSQLInjection(value: string, relaxed: boolean = false): boolean {
+  const patterns = relaxed ? SQL_INJECTION_PATTERNS_RELAXED : SQL_INJECTION_PATTERNS_STRICT;
+  return patterns.some(pattern => {
+    // Reset regex lastIndex to avoid issues with global flag
+    pattern.lastIndex = 0;
+    return pattern.test(value);
+  });
 }
 
 /**
@@ -48,10 +81,13 @@ function containsXSS(value: string): boolean {
 
 /**
  * Recursively sanitize an object by checking all string values
+ * @param obj - The object to check
+ * @param path - Current path in the object for error reporting
+ * @param relaxed - Use relaxed SQL patterns for natural language input
  */
-function sanitizeObject(obj: any, path: string = 'body'): { isMalicious: boolean; type?: string; field?: string } {
+function sanitizeObject(obj: any, path: string = 'body', relaxed: boolean = false): { isMalicious: boolean; type?: string; field?: string } {
   if (typeof obj === 'string') {
-    if (containsSQLInjection(obj)) {
+    if (containsSQLInjection(obj, relaxed)) {
       return { isMalicious: true, type: 'SQL_INJECTION', field: path };
     }
     if (containsXSS(obj)) {
@@ -62,7 +98,7 @@ function sanitizeObject(obj: any, path: string = 'body'): { isMalicious: boolean
 
   if (Array.isArray(obj)) {
     for (let i = 0; i < obj.length; i++) {
-      const result = sanitizeObject(obj[i], `${path}[${i}]`);
+      const result = sanitizeObject(obj[i], `${path}[${i}]`, relaxed);
       if (result.isMalicious) {
         return result;
       }
@@ -73,7 +109,7 @@ function sanitizeObject(obj: any, path: string = 'body'): { isMalicious: boolean
   if (obj && typeof obj === 'object') {
     for (const key in obj) {
       if (obj.hasOwnProperty(key)) {
-        const result = sanitizeObject(obj[key], `${path}.${key}`);
+        const result = sanitizeObject(obj[key], `${path}.${key}`, relaxed);
         if (result.isMalicious) {
           return result;
         }
@@ -90,9 +126,14 @@ function sanitizeObject(obj: any, path: string = 'body'): { isMalicious: boolean
  */
 export function sanitizeInput(req: Request, res: Response, next: NextFunction): void {
   try {
+    // Check if this is a natural language route (chat/AI)
+    const isNaturalLanguageRoute = NATURAL_LANGUAGE_ROUTES.some(route => 
+      req.path.startsWith(route) || req.originalUrl.includes(route)
+    );
+    
     // Check body
     if (req.body && Object.keys(req.body).length > 0) {
-      const bodyResult = sanitizeObject(req.body, 'body');
+      const bodyResult = sanitizeObject(req.body, 'body', isNaturalLanguageRoute);
       if (bodyResult.isMalicious) {
         logger.warn('Malicious input detected', {
           type: bodyResult.type,
@@ -111,9 +152,9 @@ export function sanitizeInput(req: Request, res: Response, next: NextFunction): 
       }
     }
 
-    // Check query parameters
+    // Check query parameters (always use strict mode for query params)
     if (req.query && Object.keys(req.query).length > 0) {
-      const queryResult = sanitizeObject(req.query, 'query');
+      const queryResult = sanitizeObject(req.query, 'query', false);
       if (queryResult.isMalicious) {
         logger.warn('Malicious input detected in query', {
           type: queryResult.type,
@@ -132,9 +173,9 @@ export function sanitizeInput(req: Request, res: Response, next: NextFunction): 
       }
     }
 
-    // Check URL parameters
+    // Check URL parameters (always use strict mode for URL params)
     if (req.params && Object.keys(req.params).length > 0) {
-      const paramsResult = sanitizeObject(req.params, 'params');
+      const paramsResult = sanitizeObject(req.params, 'params', false);
       if (paramsResult.isMalicious) {
         logger.warn('Malicious input detected in params', {
           type: paramsResult.type,
