@@ -45,6 +45,10 @@ class _WalletManagementPanelState extends State<WalletManagementPanel>
   List<Map<String, dynamic>> _solanaWallets = [];
   List<Map<String, dynamic>> _evmWallets = [];
 
+  // Track which wallet is currently showing private key (only one at a time)
+  String? _revealedWalletId;
+  String? _revealedPrivateKey;
+
   @override
   void initState() {
     super.initState();
@@ -478,7 +482,7 @@ class _WalletManagementPanelState extends State<WalletManagementPanel>
       itemBuilder: (context, index) {
         final wallet = _solanaWallets[index];
         final isPrimary = wallet['isPrimary'] == true || wallet['is_primary'] == true;
-        final walletId = wallet['id']?.toString() ?? wallet['_id']?.toString();
+        final walletId = wallet['id']?.toString() ?? wallet['_id']?.toString() ?? '';
         final address = wallet['publicKey']?.toString() ?? 
                        wallet['fullAddress']?.toString() ?? 
                        wallet['public_key']?.toString() ?? 
@@ -493,6 +497,9 @@ class _WalletManagementPanelState extends State<WalletManagementPanel>
           onSetPrimary: isPrimary ? null : () => _setAsPrimary(walletId, index),
           onViewPrivateKey: () => _showPasswordDialog(walletId, address),
           shortenAddress: _shortenAddress,
+          isRevealed: _revealedWalletId == walletId || _revealedWalletId == address,
+          privateKey: (_revealedWalletId == walletId || _revealedWalletId == address) ? _revealedPrivateKey : null,
+          onHidePrivateKey: _hidePrivateKey,
         );
       },
     );
@@ -557,7 +564,7 @@ class _WalletManagementPanelState extends State<WalletManagementPanel>
           (c) => c['id'] == wallet['chainId'],
           orElse: () => {'name': 'Unknown', 'symbol': '?', 'icon': '?'},
         );
-        final walletId = wallet['id']?.toString() ?? wallet['_id']?.toString();
+        final walletId = wallet['id']?.toString() ?? wallet['_id']?.toString() ?? '';
         final address = wallet['address']?.toString() ?? '';
 
         return _FlipWalletCard(
@@ -573,6 +580,9 @@ class _WalletManagementPanelState extends State<WalletManagementPanel>
               : () => _setAsPrimary(walletId, index),
           onViewPrivateKey: () => _showPasswordDialog(walletId, address),
           shortenAddress: _shortenAddress,
+          isRevealed: _revealedWalletId == walletId || _revealedWalletId == address,
+          privateKey: (_revealedWalletId == walletId || _revealedWalletId == address) ? _revealedPrivateKey : null,
+          onHidePrivateKey: _hidePrivateKey,
         );
       },
     );
@@ -1026,8 +1036,8 @@ class _WalletManagementPanelState extends State<WalletManagementPanel>
         final privateKey = response['data']?['privateKey']?.toString() ?? 
                           response['privateKey']?.toString() ?? '';
         
-        // Show the private key in a new dialog or update wallet state
-        _showPrivateKeyResult(address, privateKey);
+        // Show the private key using wallet ID
+        _showPrivateKeyResult(walletId ?? address, privateKey);
       } else {
         setError(response['error']?.toString() ?? 'Invalid password');
       }
@@ -1038,33 +1048,19 @@ class _WalletManagementPanelState extends State<WalletManagementPanel>
     }
   }
 
-  void _showPrivateKeyResult(String address, String privateKey) {
-    // Find wallet index and trigger flip animation
-    for (int i = 0; i < _solanaWallets.length; i++) {
-      final wallet = _solanaWallets[i];
-      final walletAddress = wallet['publicKey']?.toString() ?? 
-                           wallet['fullAddress']?.toString() ?? 
-                           wallet['address']?.toString() ?? '';
-      if (walletAddress == address) {
-        setState(() {
-          _solanaWallets[i]['_showPrivateKey'] = true;
-          _solanaWallets[i]['_privateKey'] = privateKey;
-        });
-        return;
-      }
-    }
-    
-    // If not found in solana wallets, check EVM wallets
-    for (int i = 0; i < _evmWallets.length; i++) {
-      final wallet = _evmWallets[i];
-      if (wallet['address']?.toString() == address) {
-        setState(() {
-          _evmWallets[i]['_showPrivateKey'] = true;
-          _evmWallets[i]['_privateKey'] = privateKey;
-        });
-        return;
-      }
-    }
+  void _showPrivateKeyResult(String walletId, String privateKey) {
+    // Set the revealed wallet ID and private key - only one wallet at a time
+    setState(() {
+      _revealedWalletId = walletId;
+      _revealedPrivateKey = privateKey;
+    });
+  }
+
+  void _hidePrivateKey() {
+    setState(() {
+      _revealedWalletId = null;
+      _revealedPrivateKey = null;
+    });
   }
 
   void _createWallet() async {
@@ -1205,6 +1201,9 @@ class _FlipWalletCard extends StatefulWidget {
   final VoidCallback? onSetPrimary;
   final VoidCallback onViewPrivateKey;
   final String Function(String) shortenAddress;
+  final bool isRevealed;
+  final String? privateKey;
+  final VoidCallback? onHidePrivateKey;
 
   const _FlipWalletCard({
     required this.wallet,
@@ -1217,6 +1216,9 @@ class _FlipWalletCard extends StatefulWidget {
     this.onSetPrimary,
     required this.onViewPrivateKey,
     required this.shortenAddress,
+    this.isRevealed = false,
+    this.privateKey,
+    this.onHidePrivateKey,
   });
 
   @override
@@ -1239,13 +1241,23 @@ class _FlipWalletCardState extends State<_FlipWalletCard>
     _animation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
+    
+    // If already revealed on init, show back
+    if (widget.isRevealed) {
+      _showBack = true;
+      _controller.value = 1.0;
+    }
   }
 
   @override
   void didUpdateWidget(_FlipWalletCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Check if we should flip to show private key
-    if (widget.wallet['_showPrivateKey'] == true && !_showBack) {
+    // Handle flip based on isRevealed parameter change
+    if (widget.isRevealed && !oldWidget.isRevealed && !_showBack) {
+      // Should reveal - flip to back
+      _flipCard();
+    } else if (!widget.isRevealed && oldWidget.isRevealed && _showBack) {
+      // Should hide - flip to front
       _flipCard();
     }
   }
@@ -1259,6 +1271,8 @@ class _FlipWalletCardState extends State<_FlipWalletCard>
   void _flipCard() {
     if (_showBack) {
       _controller.reverse();
+      // Notify parent to clear revealed state when hiding
+      widget.onHidePrivateKey?.call();
     } else {
       _controller.forward();
     }
@@ -1487,7 +1501,7 @@ class _FlipWalletCardState extends State<_FlipWalletCard>
   }
 
   Widget _buildBackCard() {
-    final privateKey = widget.wallet['_privateKey']?.toString() ?? '';
+    final privateKey = widget.privateKey ?? '';
     
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
