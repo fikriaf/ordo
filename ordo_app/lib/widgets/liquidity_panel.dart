@@ -179,13 +179,13 @@ class _LiquidityPanelState extends State<LiquidityPanel> {
                     ),
                     child: Column(
                       children: [
-                        _buildDetailRow('Pool', 'SOL-USDC'),
+                        _buildDetailRow('Pool', widget.data['pool']?.toString() ?? '--'),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Fee Tier', '0.3%'),
+                        _buildDetailRow('Fee Tier', widget.data['feeTier']?.toString() ?? '--'),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Est. APR', '12.5%', Colors.green),
+                        _buildDetailRow('Est. APR', widget.data['estimatedApr']?.toString() ?? '--', Colors.green),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Your Share', '0%'),
+                        _buildDetailRow('Your Share', widget.data['yourShare']?.toString() ?? '0%'),
                       ],
                     ),
                   ),

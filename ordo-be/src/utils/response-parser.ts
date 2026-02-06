@@ -226,15 +226,65 @@ function extractDetails(toolResults: ToolResult[]): Record<string, any> {
     if (toolName.includes('wallet')) {
       if (result.address) {
         details.address = result.address;
+        
+        // If it's an EVM wallet creation, add to evmWallets array
+        if (toolName.includes('evm') || result.chainId || result.chain) {
+          const chainId = result.chainId || result.chain || 'ethereum';
+          details.evmWallets = [{
+            address: result.address,
+            chainId: chainId,
+            name: result.name || 'New Wallet',
+            balance: result.balance || 0,
+            usdValue: result.usdValue || 0,
+            isPrimary: result.isPrimary || false,
+            isNew: true, // Flag to indicate this is a newly created wallet
+          }];
+        } else {
+          // Solana wallet
+          details.wallets = [{
+            publicKey: result.address,
+            fullAddress: result.address,
+            name: result.name || 'New Wallet',
+            balance: result.balance || 0,
+            usdValue: result.usdValue || 0,
+            isPrimary: result.isPrimary || false,
+            isNew: true,
+          }];
+        }
       }
       if (result.wallet) {
         details.wallet = result.wallet;
+        
+        // Also structure it for the panel
+        if (result.wallet.address) {
+          if (result.wallet.chainId || result.wallet.chain) {
+            details.evmWallets = details.evmWallets || [];
+            details.evmWallets.push({
+              ...result.wallet,
+              isNew: true,
+            });
+          } else {
+            details.wallets = details.wallets || [];
+            details.wallets.push({
+              ...result.wallet,
+              publicKey: result.wallet.address,
+              fullAddress: result.wallet.address,
+              isNew: true,
+            });
+          }
+        }
       }
       if (result.wallets) {
         details.wallets = result.wallets;
       }
+      if (result.evmWallets) {
+        details.evmWallets = result.evmWallets;
+      }
       if (result.chain) {
         details.chain = result.chain;
+      }
+      if (result.chainId) {
+        details.chainId = result.chainId;
       }
     }
     

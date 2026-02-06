@@ -234,13 +234,13 @@ class _BridgePanelState extends State<BridgePanel> {
                     ),
                     child: Column(
                       children: [
-                        _buildDetailRow('Bridge', 'Wormhole'),
+                        _buildDetailRow('Bridge', widget.data['bridge']?.toString() ?? '--'),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Est. Time', '~15 min'),
+                        _buildDetailRow('Est. Time', widget.data['estimatedTime']?.toString() ?? '--'),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Bridge Fee', '0.1%'),
+                        _buildDetailRow('Bridge Fee', widget.data['bridgeFee']?.toString() ?? '--'),
                         const SizedBox(height: 12),
-                        _buildDetailRow('You will receive', '~0.00 ETH'),
+                        _buildDetailRow('You will receive', widget.data['estimatedReceive']?.toString() ?? '--'),
                       ],
                     ),
                   ),

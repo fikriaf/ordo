@@ -4,12 +4,13 @@ import { v4 as uuidv4 } from 'uuid';
 import supabase from '../config/database';
 import env from '../config/env';
 import logger from '../config/logger';
-import { User } from '../types';
+import { User, Wallet } from '../types';
+import walletService from './wallet.service';
 
 const SALT_ROUNDS = 10;
 
 export class AuthService {
-  async register(email: string, password: string, role: 'user' | 'admin' = 'user'): Promise<{ user: Omit<User, 'password_hash'>; token: string }> {
+  async register(email: string, password: string, role: 'user' | 'admin' = 'user'): Promise<{ user: Omit<User, 'password_hash'>; token: string; wallet: Wallet }> {
     try {
       // Check if user already exists
       const { data: existingUser } = await supabase
@@ -43,11 +44,15 @@ export class AuthService {
         throw new Error('Failed to create user');
       }
 
+      // Auto-create wallet for new user
+      const wallet = await walletService.createWallet(userId);
+      logger.info(`Auto-created wallet for new user: ${wallet.public_key}`);
+
       // Generate JWT token
       const token = this.generateToken(user.id, user.email, user.role);
 
       logger.info(`User registered: ${email}`);
-      return { user, token };
+      return { user, token, wallet };
     } catch (error) {
       logger.error('Registration error:', error);
       throw error;

@@ -150,9 +150,9 @@ class PortfolioPanel extends StatelessWidget {
                           icon: Icons.currency_bitcoin,
                           name: 'SOL',
                           amount: sol.toStringAsFixed(4),
-                          value: (sol * 150).toStringAsFixed(2), // Mock price
-                          change: '+2.4%',
-                          isPositive: true,
+                          value: _extractDouble(data['solUsdValue']).toStringAsFixed(2),
+                          change: data['solChange']?.toString() ?? '--',
+                          isPositive: _extractDouble(data['solChange']) >= 0,
                         ),
 
                       // Tokens
@@ -325,8 +325,12 @@ class PortfolioPanel extends StatelessWidget {
   }
 
   double _calculateTotalValue(double sol, List tokens) {
-    double total = sol * 150; // Mock SOL price
-    // Add token values here
+    // Use provided USD value from API, or return 0 if not available
+    double total = _extractDouble(data['solUsdValue']);
+    // Add token values if available
+    for (var token in tokens) {
+      total += _extractDouble(token['usdValue']);
+    }
     return total;
   }
 

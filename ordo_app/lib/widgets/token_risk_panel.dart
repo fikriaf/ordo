@@ -13,12 +13,15 @@ class TokenRiskPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final riskScore = _extractInt(data['riskScore'] ?? data['score'] ?? 65);
-    final marketScore = _extractInt(data['marketScore'] ?? 45);
-    final liquidityScore = _extractInt(data['liquidityScore'] ?? 30);
-    final holderScore = _extractInt(data['holderScore'] ?? 72);
+    final riskScore = _extractInt(data['riskScore'] ?? data['score']);
+    final marketScore = _extractInt(data['marketScore']);
+    final liquidityScore = _extractInt(data['liquidityScore']);
+    final holderScore = _extractInt(data['holderScore']);
     final tokenSymbol = data['symbol']?.toString() ?? 'TOKEN';
     final tokenPair = data['pair']?.toString() ?? '$tokenSymbol / SOL';
+    final topHoldersPercent = data['topHoldersPercent']?.toString() ?? '--';
+    final limitingFactors = (data['limitingFactors'] as List?) ?? [];
+    final recommendation = data['recommendation']?.toString() ?? 'No recommendation available';
     
     final riskLevel = _getRiskLevel(riskScore);
     final riskColor = _getRiskColor(riskScore);
@@ -172,27 +175,39 @@ class TokenRiskPanel extends StatelessWidget {
                         width: 1,
                       ),
                     ),
-                    child: Column(
-                      children: [
-                        _buildLimitingFactor(
-                          icon: Icons.warning_amber_rounded,
-                          title: 'High Volatility',
-                          description: 'Price fluctuates more than 15% within 4-hour windows. Extreme slippage risk.',
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          child: Divider(
-                            height: 1,
-                            color: Colors.white.withOpacity(0.05),
+                    child: limitingFactors.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No limiting factors identified',
+                              style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 13,
+                              ),
+                            ),
+                          )
+                        : Column(
+                            children: limitingFactors.asMap().entries.map((entry) {
+                              final factor = entry.value as Map<String, dynamic>? ?? {};
+                              final isLast = entry.key == limitingFactors.length - 1;
+                              return Column(
+                                children: [
+                                  _buildLimitingFactor(
+                                    icon: Icons.warning_amber_rounded,
+                                    title: factor['title']?.toString() ?? 'Unknown Factor',
+                                    description: factor['description']?.toString() ?? '',
+                                  ),
+                                  if (!isLast)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(vertical: 12),
+                                      child: Divider(
+                                        height: 1,
+                                        color: Colors.white.withOpacity(0.05),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            }).toList(),
                           ),
-                        ),
-                        _buildLimitingFactor(
-                          icon: Icons.water_drop_outlined,
-                          title: 'Low Liquidity Density',
-                          description: 'Pool depth is insufficient for trades exceeding 50 SOL without >2% impact.',
-                        ),
-                      ],
-                    ),
                   ),
 
                   const SizedBox(height: 16),
@@ -238,7 +253,7 @@ class TokenRiskPanel extends StatelessWidget {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Top 10 wallets hold 12.4%',
+                                topHoldersPercent != '--' ? 'Top 10 wallets hold $topHoldersPercent' : 'Data not available',
                                 style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 12,
@@ -292,9 +307,9 @@ class TokenRiskPanel extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Exercise caution, avoid large positions. Current liquidity depth does not support high-frequency institutional trading.',
-                          style: TextStyle(
+                        Text(
+                          recommendation,
+                          style: const TextStyle(
                             color: Colors.white,
                             fontSize: 13,
                             height: 1.5,

@@ -115,7 +115,7 @@ class _SwapPanelState extends State<SwapPanel> {
                   label: 'From',
                   token: _fromToken,
                   controller: _amountController,
-                  balance: '10.5', // TODO: Get real balance
+                  balance: widget.data['fromBalance']?.toString(),
                 ),
 
                 const SizedBox(height: 16),
@@ -142,7 +142,7 @@ class _SwapPanelState extends State<SwapPanel> {
                   token: _toToken,
                   controller: null,
                   balance: null,
-                  estimatedAmount: '~150.00', // TODO: Get real quote
+                  estimatedAmount: widget.data['estimatedOutput']?.toString() ?? '--',
                 ),
 
                 const SizedBox(height: 24),
@@ -160,11 +160,11 @@ class _SwapPanelState extends State<SwapPanel> {
                   ),
                   child: Column(
                     children: [
-                      _buildInfoRow('Rate', '1 $_fromToken = 150 $_toToken'),
+                      _buildInfoRow('Rate', widget.data['rate']?.toString() ?? '--'),
                       const SizedBox(height: 8),
-                      _buildInfoRow('Slippage', '0.5%'),
+                      _buildInfoRow('Slippage', widget.data['slippage']?.toString() ?? '0.5%'),
                       const SizedBox(height: 8),
-                      _buildInfoRow('Fee', '~0.001 SOL'),
+                      _buildInfoRow('Fee', widget.data['fee']?.toString() ?? '--'),
                     ],
                   ),
                 ),

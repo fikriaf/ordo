@@ -13,7 +13,7 @@ class NftGalleryPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final nfts = (data['nfts'] as List?)?.cast<Map<String, dynamic>>() ?? _getDummyNfts();
+    final nfts = (data['nfts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final totalValue = data['totalValue'] ?? 0.0;
     final count = nfts.length;
 
@@ -120,28 +120,31 @@ class NftGalleryPanel extends StatelessWidget {
 
           const SizedBox(height: 16),
 
-          // NFT Grid
-          Container(
-            constraints: const BoxConstraints(maxHeight: 400),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 12,
-                  mainAxisSpacing: 12,
-                  childAspectRatio: 0.85,
+          // NFT Grid or Empty State
+          if (nfts.isEmpty)
+            _buildEmptyState()
+          else
+            Container(
+              constraints: const BoxConstraints(maxHeight: 400),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: GridView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 0.85,
+                  ),
+                  itemCount: nfts.length,
+                  itemBuilder: (context, index) {
+                    final nft = nfts[index];
+                    return _buildNftCard(nft);
+                  },
                 ),
-                itemCount: nfts.length,
-                itemBuilder: (context, index) {
-                  final nft = nfts[index];
-                  return _buildNftCard(nft);
-                },
               ),
             ),
-          ),
 
           const SizedBox(height: 20),
 
@@ -325,32 +328,45 @@ class NftGalleryPanel extends StatelessWidget {
     );
   }
 
-  List<Map<String, dynamic>> _getDummyNfts() {
-    return [
-      {
-        'name': 'Degenerate Ape #123',
-        'collection': 'Degenerate Ape Academy',
-        'floorPrice': 45.20,
-        'image': '',
-      },
-      {
-        'name': 'SMB #4412',
-        'collection': 'Solana Monkey Business',
-        'floorPrice': 12.50,
-        'image': '',
-      },
-      {
-        'name': 'Mad Lads #881',
-        'collection': 'Mad Lads',
-        'floorPrice': 110.0,
-        'image': '',
-      },
-      {
-        'name': 'Claynosaurz #21',
-        'collection': 'Claynosaurz',
-        'floorPrice': 35.15,
-        'image': '',
-      },
-    ];
+  Widget _buildEmptyState() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.photo_library_outlined,
+              color: AppTheme.primary,
+              size: 40,
+            ),
+          ),
+          const SizedBox(height: 20),
+          const Text(
+            'No NFTs Found',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Your NFT collection will appear here\nwhen you own some NFTs.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

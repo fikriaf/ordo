@@ -18,9 +18,14 @@ import '../widgets/settings_panel.dart';
 import '../widgets/nft_gallery_panel.dart';
 import '../widgets/staking_panel.dart';
 import '../widgets/lending_panel.dart';
+import '../widgets/deposit_panel.dart';
 import '../widgets/borrowing_panel.dart';
 import '../widgets/liquidity_panel.dart';
 import '../widgets/bridge_panel.dart';
+import '../widgets/send_panel.dart';
+import '../widgets/wallet_management_panel.dart';
+import '../widgets/approval_history_panel.dart';
+import '../widgets/ai_response_panel.dart';
 import '../services/command_index.dart';
 import '../models/command_action.dart';
 import '../theme/app_theme.dart';
@@ -63,7 +68,12 @@ class _CommandScreenState extends State<CommandScreen> {
 
   void _onFocusChanged() {
     if (_focusNode.hasFocus && _suggestions.isNotEmpty) {
-      _showOverlay();
+      // Small delay to allow user to see the input first
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (_focusNode.hasFocus && _suggestions.isNotEmpty) {
+          _showOverlay();
+        }
+      });
     } else {
       _removeOverlay();
     }
@@ -74,11 +84,13 @@ class _CommandScreenState extends State<CommandScreen> {
       _suggestions = CommandIndexService.search(query, limit: 5);
     });
     
-    // Update overlay if it's showing
-    if (_focusNode.hasFocus && _suggestions.isNotEmpty) {
-      _showOverlay();
-    } else {
-      _removeOverlay();
+    // Only update overlay if already showing OR if there's a query
+    if (_overlayEntry != null && _focusNode.hasFocus) {
+      if (_suggestions.isNotEmpty) {
+        _showOverlay();
+      } else {
+        _removeOverlay();
+      }
     }
   }
 
@@ -89,37 +101,53 @@ class _CommandScreenState extends State<CommandScreen> {
       builder: (context) {
         // Get keyboard height
         final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+        // Input area height (CommandInput + bottom padding)
+        const inputAreaHeight = 80.0;
+        final screenHeight = MediaQuery.of(context).size.height;
+        // Max height for suggestions (50% of available space)
+        final maxSuggestionsHeight = (screenHeight - keyboardHeight - inputAreaHeight - 100) * 0.6;
         
         return Positioned(
           left: 0,
           right: 0,
-          bottom: 0,
+          // Don't cover the input area at the bottom
+          bottom: keyboardHeight + inputAreaHeight + 16, // Above input area
           top: 0,
           child: Material(
-            color: Colors.black.withOpacity(0.5),
+            color: Colors.transparent,
             child: GestureDetector(
               onTap: () {
+                _removeOverlay();
                 _focusNode.unfocus();
               },
-              child: Stack(
-                children: [
-                  // Suggestions panel - ABOVE keyboard!
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: keyboardHeight + 80, // Above keyboard + input height
-                    child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                color: Colors.black.withOpacity(0.5),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    // Suggestions panel at the bottom of this area
+                    GestureDetector(
                       onTap: () {}, // Prevent tap through
-                      child: SuggestionsPanel(
-                        suggestions: _suggestions,
-                        onSuggestionTap: (template) {
-                          _removeOverlay();
-                          _onSuggestionTap(template);
-                        },
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: maxSuggestionsHeight.clamp(150.0, 400.0),
+                        ),
+                        child: SuggestionsPanel(
+                          suggestions: _suggestions,
+                          onSuggestionTap: (template) {
+                            _removeOverlay();
+                            _onSuggestionTap(template);
+                          },
+                          onClose: () {
+                            _removeOverlay();
+                            _focusNode.unfocus();
+                          },
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -403,21 +431,13 @@ class _CommandScreenState extends State<CommandScreen> {
         );
       
       case AssistantState.executing:
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(
-                'Executing...',
-                style: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
+        return ExecutingPanel(
+          action: controller.currentCommand,
+          tools: controller.reasoningSteps
+              .where((s) => s.toLowerCase().contains('tool'))
+              .toList(),
+          progress: 0.6,
+          status: 'Broadcasting transaction...',
         );
       
       case AssistantState.showingPanel:
@@ -548,26 +568,88 @@ class _CommandScreenState extends State<CommandScreen> {
           onDismiss: () => controller.dismissPanel(),
         );
       
-      // Token price/info - show in info panel
+      // Wallet management interface
+      case ActionType.manageWallets:
+      case ActionType.manageEvmWallets:
+      case ActionType.createWallet:
+      case ActionType.importWallet:
+      case ActionType.switchWallet:
+        return WalletManagementPanel(
+          data: action.data,
+          initialTab: action.type == ActionType.manageEvmWallets ? 1 : 0,
+          onDismiss: () => controller.dismissPanel(),
+        );
+      
+      // Approval history interface
+      case ActionType.showApprovalHistory:
+        return ApprovalHistoryPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
+        );
+      
+      // Command history - placeholder for now
+      case ActionType.showCommandHistory:
+        return _buildPlaceholderPanel(
+          'Command History',
+          'View your past commands and their results',
+          'history',
+          controller,
+        );
+      
+      // Analytics - placeholder for now  
+      case ActionType.showAnalytics:
+      case ActionType.showActivity:
+        return _buildPlaceholderPanel(
+          'Analytics',
+          'View detailed wallet analytics and activity',
+          'bar_chart',
+          controller,
+        );
+      
+      // Security settings - placeholder for now
+      case ActionType.showSecuritySettings:
+        return _buildPlaceholderPanel(
+          'Security & Limits',
+          'Configure transaction limits and security settings',
+          'shield',
+          controller,
+        );
+      
+      // About panel
+      case ActionType.showAbout:
+        return _buildAboutPanel(controller);
+      
+      // Token price/info - show AI response panel
       case ActionType.tokenPrice:
       case ActionType.tokenInfo:
-        return _buildInfoPanel(
-          action.message ?? 'Token information',
-          controller,
+        return AIResponsePanel(
+          action: action,
+          onDismiss: () => controller.dismissPanel(),
         );
       
-      // Send/Transfer - show in info panel for now
+      // Send/Transfer - show send panel
       case ActionType.sendSol:
       case ActionType.sendToken:
-        return _buildInfoPanel(
-          action.message ?? 'Transfer initiated',
-          controller,
+        return SendPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
         );
       
-      default:
-        return _buildInfoPanel(
-          'Command processed',
-          controller,
+      // Deposit - show deposit panel
+      case ActionType.deposit:
+        return DepositPanel(
+          data: action.data,
+          onDismiss: () => controller.dismissPanel(),
+        );
+      
+      // Generic info response - use AI response panel for unhandled types
+      case ActionType.info:
+      case ActionType.unknown:
+      case ActionType.error:
+      case _:
+        return AIResponsePanel(
+          action: action,
+          onDismiss: () => controller.dismissPanel(),
         );
     }
   }
@@ -712,6 +794,186 @@ class _CommandScreenState extends State<CommandScreen> {
                   fontWeight: FontWeight.w600,
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAboutPanel(AssistantController controller) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.surface.withOpacity(0.95),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.1),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.terminal,
+                  color: AppTheme.primary,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 16),
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'ORDO',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  Text(
+                    'AI DeFi Assistant',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.close, color: Colors.white70),
+                onPressed: () => controller.dismissPanel(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          
+          // Version info
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.card,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.info_outline, color: AppTheme.textSecondary, size: 20),
+                SizedBox(width: 12),
+                Text('Version', style: TextStyle(color: AppTheme.textSecondary)),
+                Spacer(),
+                Text('1.0.0', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          
+          // Features
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.card,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Features',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _buildFeatureItem(Icons.swap_horiz, 'Token Swaps', 'Swap any SPL token with best rates'),
+                _buildFeatureItem(Icons.account_balance_wallet, 'Multi-Wallet', 'Manage Solana & EVM wallets'),
+                _buildFeatureItem(Icons.savings, 'DeFi', 'Stake, lend, borrow, and more'),
+                _buildFeatureItem(Icons.photo_library, 'NFTs', 'View and manage your NFT collection'),
+                _buildFeatureItem(Icons.shield, 'Security', 'Approval system and transaction limits'),
+                _buildFeatureItem(Icons.mic, 'Voice Commands', 'Control with natural language'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // Footer
+          Text(
+            'Made by Daemon BlockInt Technologies',
+            style: TextStyle(
+              color: AppTheme.textTertiary,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 16),
+          
+          // Close button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => controller.dismissPanel(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primary,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Close',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureItem(IconData icon, String title, String description) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, color: AppTheme.primary, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ),
         ],

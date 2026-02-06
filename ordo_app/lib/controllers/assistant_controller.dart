@@ -109,8 +109,8 @@ class AssistantController extends ChangeNotifier {
     _currentAction = CommandAction(
       type: route.action,
       data: response['data'] ?? response,
-      message: null,
-      toolCalls: null,
+      summary: null,
+      rawMessage: null,
     );
     
     // Record successful command
@@ -125,8 +125,8 @@ class AssistantController extends ChangeNotifier {
     _currentAction = CommandAction(
       type: route.action,
       data: route.params ?? {},
-      message: null,
-      toolCalls: null,
+      summary: null,
+      rawMessage: null,
     );
     
     // Record successful command
@@ -145,7 +145,7 @@ class AssistantController extends ChangeNotifier {
     
     String accumulatedText = '';
     List<String> toolsUsed = [];
-    bool useStreamingFallback = false;
+    Map<String, dynamic>? structuredDoneEvent;
     
     try {
       // Try streaming first
@@ -160,7 +160,7 @@ class AssistantController extends ChangeNotifier {
             _reasoningSteps = [
               'Analyzing command...',
               'Using tools: ${toolsUsed.join(", ")}',
-              'Processing... (${accumulatedText.length} chars)',
+              'Processing...',
             ];
             notifyListeners();
           } else if (chunk.startsWith('[✓ ')) {
@@ -168,32 +168,30 @@ class AssistantController extends ChangeNotifier {
             _reasoningSteps = [
               'Analyzing command...',
               'Tools used: ${toolsUsed.join(", ")}',
-              'Receiving response... (${accumulatedText.length} chars)',
+              'Receiving response...',
             ];
             notifyListeners();
-          } else {
-            // Regular text chunk
-            accumulatedText += chunk;
-            
-            // Update progress every 50 chars to avoid too many updates
-            if (accumulatedText.length % 50 == 0 || accumulatedText.length < 50) {
-              _reasoningSteps = [
-                'Analyzing command...',
-                if (toolsUsed.isNotEmpty) 'Tools: ${toolsUsed.join(", ")}',
-                'Receiving response... (${accumulatedText.length} chars)',
-              ];
-              notifyListeners();
+          } else if (chunk.startsWith('___DONE___')) {
+            // Structured done event from backend
+            final doneJson = chunk.substring(10); // Remove '___DONE___' prefix
+            try {
+              structuredDoneEvent = jsonDecode(doneJson);
+              print('🔵 Received structured done event');
+            } catch (e) {
+              print('🔴 Failed to parse done event: $e');
             }
+          } else {
+            // Regular text chunk - accumulate for fallback
+            accumulatedText += chunk;
           }
           
-          print('🔵 Accumulated: ${accumulatedText.length} chars');
+          print('🔵 Chunk received: ${chunk.length} chars');
         }
       } catch (streamError) {
         print('🔴 Streaming failed: $streamError');
         print('🔵 Falling back to non-streaming API...');
         
         // Fallback to non-streaming
-        useStreamingFallback = true;
         _reasoningSteps = [
           'Analyzing command...',
           'Processing request...',
@@ -202,47 +200,61 @@ class AssistantController extends ChangeNotifier {
         
         final response = await apiClient.sendMessage(command);
         
-        // Convert non-streaming response to text
-        if (response['data'] != null) {
-          accumulatedText = jsonEncode(response);
-        } else {
-          accumulatedText = jsonEncode(response);
-        }
+        // Non-streaming response is already structured
+        _currentAction = CommandAction.fromApiResponse(response);
+        
+        print('🔵 Non-streaming Action Type: ${_currentAction!.type}');
+        print('🔵 Non-streaming Summary: ${_currentAction!.summary}');
+        
+        // Record successful command
+        contextService.recordCommand(command);
+        
+        // Show panel
+        _setState(AssistantState.showingPanel);
+        return;
       }
       
-      print('🔵 Final accumulated text: $accumulatedText');
-      
-      // Parse final response
-      if (accumulatedText.isEmpty) {
+      // Parse final response from structured done event or fallback
+      if (structuredDoneEvent != null) {
+        // Use structured done event directly
+        print('🔵 Using structured done event');
+        _currentAction = CommandAction.fromStreamDoneEvent(structuredDoneEvent);
+      } else if (accumulatedText.isNotEmpty) {
+        // Fallback: try to parse accumulated text
+        print('🔵 Using accumulated text fallback');
+        Map<String, dynamic> response;
+        try {
+          response = jsonDecode(accumulatedText);
+        } catch (e) {
+          // If not JSON, treat as plain text response
+          print('🔵 Response is plain text, not JSON');
+          response = {
+            'success': true,
+            'data': {
+              'actionType': 'info',
+              'status': 'success',
+              'summary': _extractSummary(accumulatedText),
+              'details': {},
+              'rawMessage': accumulatedText,
+              'toolsUsed': toolsUsed,
+            },
+          };
+        }
+        
+        // Check if response is successful
+        if (response['success'] == false) {
+          final errorMsg = response['error']?.toString() ?? 'Request failed';
+          throw Exception(errorMsg);
+        }
+        
+        // Parse action from response
+        _currentAction = CommandAction.fromApiResponse(response);
+      } else {
         throw Exception('No response from AI. Please try a different command or check your connection.');
       }
       
-      // Try to parse as JSON
-      Map<String, dynamic> response;
-      try {
-        response = jsonDecode(accumulatedText);
-      } catch (e) {
-        // If not JSON, treat as plain text response
-        print('🔵 Response is plain text, not JSON');
-        response = {
-          'success': true,
-          'data': {
-            'message': accumulatedText,
-          },
-        };
-      }
-      
-      // Check if response is successful
-      if (response['success'] == false) {
-        final errorMsg = response['error']?.toString() ?? 'Request failed';
-        throw Exception(errorMsg);
-      }
-      
-      // Parse action from response
-      _currentAction = CommandAction.fromApiResponse(response);
-      
       print('🔵 Action Type: ${_currentAction!.type}');
-      print('🔵 Action Data: ${_currentAction!.data}');
+      print('🔵 Summary: ${_currentAction!.summary}');
       
       // Record successful command
       contextService.recordCommand(command);
@@ -279,6 +291,16 @@ class AssistantController extends ChangeNotifier {
         }
       });
     }
+  }
+  
+  // Extract short summary from text
+  String _extractSummary(String text) {
+    final sentences = text.split('. ');
+    if (sentences.isNotEmpty) {
+      final first = sentences.first.trim();
+      return first.length > 100 ? '${first.substring(0, 100)}...' : first;
+    }
+    return text.length > 100 ? '${text.substring(0, 100)}...' : text;
   }
   
   void _setState(AssistantState newState) {

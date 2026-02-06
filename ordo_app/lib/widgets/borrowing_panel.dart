@@ -139,9 +139,9 @@ class _BorrowingPanelState extends State<BorrowingPanel> {
                     ),
                     child: Column(
                       children: [
-                        _buildDetailRow('Available Collateral', '5.2 SOL'),
+                        _buildDetailRow('Available Collateral', widget.data['availableCollateral']?.toString() ?? '--'),
                         const SizedBox(height: 8),
-                        _buildDetailRow('Borrow Limit', '\$450.00', AppTheme.primary),
+                        _buildDetailRow('Borrow Limit', widget.data['borrowLimit']?.toString() ?? '--', AppTheme.primary),
                       ],
                     ),
                   ),
@@ -230,13 +230,13 @@ class _BorrowingPanelState extends State<BorrowingPanel> {
                     ),
                     child: Column(
                       children: [
-                        _buildDetailRow('Borrow APY', '8.5%', Colors.orange),
+                        _buildDetailRow('Borrow APY', widget.data['borrowApy']?.toString() ?? '--', Colors.orange),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Protocol', 'Solend'),
+                        _buildDetailRow('Protocol', widget.data['protocol']?.toString() ?? '--'),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Liquidation Threshold', '85%'),
+                        _buildDetailRow('Liquidation Threshold', widget.data['liquidationThreshold']?.toString() ?? '--'),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Health Factor', '1.8', Colors.green),
+                        _buildDetailRow('Health Factor', widget.data['healthFactor']?.toString() ?? '--', Colors.green),
                       ],
                     ),
                   ),

@@ -35,8 +35,8 @@ class _StakingPanelState extends State<StakingPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final availableBalance = widget.data['availableBalance'] ?? 10.5;
-    final estimatedApy = widget.data['apy'] ?? 7.2;
+    final availableBalance = widget.data['availableBalance'] ?? 0.0;
+    final estimatedApy = widget.data['apy'] ?? 0.0;
 
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),

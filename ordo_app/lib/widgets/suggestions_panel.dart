@@ -18,11 +18,13 @@ class SuggestionItem {
 class SuggestionsPanel extends StatelessWidget {
   final List<SuggestionItem> suggestions;
   final Function(String) onSuggestionTap;
+  final VoidCallback? onClose;
 
   const SuggestionsPanel({
     super.key,
     required this.suggestions,
     required this.onSuggestionTap,
+    this.onClose,
   });
 
   @override
@@ -50,17 +52,75 @@ class SuggestionsPanel extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: suggestions.asMap().entries.map((entry) {
-            final index = entry.key;
-            final suggestion = entry.value;
-            final isLast = index == suggestions.length - 1;
-            
-            return _buildSuggestionItem(
-              context,
-              suggestion,
-              isLast,
-            );
-          }).toList(),
+          children: [
+            // Header with close button
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: Colors.white.withOpacity(0.05),
+                    width: 1,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.lightbulb_outline,
+                    size: 16,
+                    color: AppTheme.textTertiary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Suggestions',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                  // Close button
+                  GestureDetector(
+                    onTap: onClose,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        Icons.close,
+                        size: 16,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            // Suggestion items - scrollable
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: suggestions.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final suggestion = entry.value;
+                    final isLast = index == suggestions.length - 1;
+                    
+                    return _buildSuggestionItem(
+                      context,
+                      suggestion,
+                      isLast,
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -205,6 +265,9 @@ class SuggestionsPanel extends StatelessWidget {
       case 'liquidity':
       case 'droplet':
         return Icons.water_drop;
+      case 'download':
+      case 'deposit':
+        return Icons.download;
       default:
         return Icons.terminal;
     }

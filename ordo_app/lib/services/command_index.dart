@@ -40,14 +40,23 @@ class CommandIndexService {
       tag: '[wallet]',
       priority: 5,
     ),
+    IndexedCommand(
+      keywords: ['deposit', 'receive', 'fund', 'top up', 'add funds', 'buy crypto'],
+      icon: 'download',
+      label: 'Deposit',
+      template: 'deposit funds',
+      tag: '[deposit]',
+      requiresAuth: true,
+      priority: 5,
+    ),
     
-    // Swap Commands
+    // Swap Commands - instant UI
     IndexedCommand(
       keywords: ['swap', 'exchange', 'convert', 'trade'],
       icon: 'repeat',
       label: 'Swap tokens',
-      template: 'swap [amount] [from] to [to]',
-      tag: '[repeat]',
+      template: 'swap tokens',
+      tag: '[swap]',
       requiresAuth: true,
       priority: 5,
     ),
@@ -56,17 +65,17 @@ class CommandIndexService {
       icon: 'repeat',
       label: 'Swap SOL to USDC',
       template: 'swap 1 sol to usdc',
-      tag: '[repeat]',
+      tag: '[swap]',
       requiresAuth: true,
       priority: 5,
     ),
     
-    // Transfer Commands
+    // Transfer Commands - instant UI
     IndexedCommand(
       keywords: ['send', 'transfer', 'pay'],
       icon: 'send',
-      label: 'Send SOL',
-      template: 'send [amount] sol to [address]',
+      label: 'Send tokens',
+      template: 'send tokens',
       tag: '[send]',
       requiresAuth: true,
       priority: 5,
@@ -75,7 +84,7 @@ class CommandIndexService {
       keywords: ['send sol', 'transfer sol'],
       icon: 'send',
       label: 'Send SOL',
-      template: 'send 0.5 sol to [address]',
+      template: 'send sol',
       tag: '[send]',
       requiresAuth: true,
       priority: 5,
@@ -99,13 +108,13 @@ class CommandIndexService {
       priority: 5,
     ),
     
-    // DeFi Commands
+    // DeFi Commands - instant UI
     IndexedCommand(
       keywords: ['stake', 'staking'],
       icon: 'coins',
       label: 'Stake SOL',
-      template: 'stake [amount] sol',
-      tag: '[coins]',
+      template: 'stake sol',
+      tag: '[stake]',
       requiresAuth: true,
       priority: 5,
     ),
@@ -113,7 +122,7 @@ class CommandIndexService {
       keywords: ['lend', 'lending'],
       icon: 'hand_coins',
       label: 'Lend assets',
-      template: 'lend [amount] [token]',
+      template: 'lend assets',
       tag: '[lend]',
       requiresAuth: true,
       priority: 5,
@@ -122,7 +131,7 @@ class CommandIndexService {
       keywords: ['borrow', 'borrowing'],
       icon: 'hand_coins',
       label: 'Borrow assets',
-      template: 'borrow [amount] [token]',
+      template: 'borrow assets',
       tag: '[borrow]',
       requiresAuth: true,
       priority: 5,
@@ -131,7 +140,7 @@ class CommandIndexService {
       keywords: ['liquidity', 'add liquidity', 'pool'],
       icon: 'droplet',
       label: 'Add liquidity',
-      template: 'add liquidity to [pool]',
+      template: 'add liquidity',
       tag: '[liquidity]',
       requiresAuth: true,
       priority: 5,
@@ -140,7 +149,7 @@ class CommandIndexService {
       keywords: ['bridge', 'cross-chain'],
       icon: 'bridge',
       label: 'Bridge assets',
-      template: 'bridge [amount] [token] to [chain]',
+      template: 'bridge assets',
       tag: '[bridge]',
       requiresAuth: true,
       priority: 5,
@@ -191,7 +200,7 @@ class CommandIndexService {
       keywords: ['risk', 'token risk', 'analyze token', 'safe'],
       icon: 'shield',
       label: 'Analyze token risk',
-      template: 'analyze risk of [token]',
+      template: 'analyze token risk',
       tag: '[risk]',
       priority: 5,
     ),
@@ -204,7 +213,7 @@ class CommandIndexService {
       priority: 5,
     ),
     
-    // Settings Commands
+    // Settings Commands - instant UI
     IndexedCommand(
       keywords: ['settings', 'preferences', 'config'],
       icon: 'settings',
@@ -217,9 +226,83 @@ class CommandIndexService {
       keywords: ['limit', 'set limit', 'transfer limit'],
       icon: 'settings',
       label: 'Set transfer limit',
-      template: 'set transfer limit to [amount]',
-      tag: '[settings]',
+      template: 'security settings',
+      tag: '[security]',
       requiresAuth: true,
+      priority: 5,
+    ),
+    
+    // Wallet Management Commands
+    IndexedCommand(
+      keywords: ['wallet', 'wallets', 'manage wallet', 'my wallets'],
+      icon: 'wallet',
+      label: 'Manage wallets',
+      template: 'manage wallets',
+      tag: '[wallet]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    IndexedCommand(
+      keywords: ['evm', 'ethereum', 'polygon', 'evm wallet'],
+      icon: 'wallet',
+      label: 'EVM wallets',
+      template: 'manage evm wallets',
+      tag: '[wallet]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    
+    // Approval History Commands
+    IndexedCommand(
+      keywords: ['approval', 'approvals', 'approval history', 'past approvals'],
+      icon: 'shield',
+      label: 'Approval history',
+      template: 'show approval history',
+      tag: '[approval]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    
+    // Command History Commands
+    IndexedCommand(
+      keywords: ['command history', 'past commands', 'recent commands'],
+      icon: 'history',
+      label: 'Command history',
+      template: 'show command history',
+      tag: '[history]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    
+    // Analytics Commands
+    IndexedCommand(
+      keywords: ['analytics', 'activity', 'wallet activity'],
+      icon: 'bar_chart',
+      label: 'View analytics',
+      template: 'show analytics',
+      tag: '[analytics]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    
+    // Security Commands
+    IndexedCommand(
+      keywords: ['security', 'limits', 'security settings', 'safety'],
+      icon: 'shield',
+      label: 'Security settings',
+      template: 'open security settings',
+      tag: '[security]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    
+    // About Commands
+    IndexedCommand(
+      keywords: ['about', 'help', 'what is ordo', 'info'],
+      icon: 'info',
+      label: 'About Ordo',
+      template: 'about',
+      tag: '[about]',
       priority: 5,
     ),
   ];

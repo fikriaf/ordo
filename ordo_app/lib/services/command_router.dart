@@ -6,6 +6,16 @@ class CommandRouter {
   static CommandRoute route(String command) {
     final lowerCommand = command.toLowerCase().trim();
     
+    // Deposit - show panel immediately
+    if (_isDepositCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.deposit,
+        params: {},
+        reason: 'Deposit interface - instant UI',
+      );
+    }
+    
     // Portfolio/Balance commands - direct API call
     if (_isBalanceCommand(lowerCommand)) {
       return CommandRoute(
@@ -33,6 +43,76 @@ class CommandRouter {
         action: ActionType.showTransactions,
         params: {},
         reason: 'Transaction history - instant UI',
+      );
+    }
+    
+    // Wallet management - show panel immediately
+    if (_isWalletManagementCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.manageWallets,
+        params: {},
+        reason: 'Wallet management - instant UI',
+      );
+    }
+    
+    // EVM wallet management
+    if (_isEvmWalletCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.manageEvmWallets,
+        params: {'tab': 'evm'},
+        reason: 'EVM wallet management - instant UI',
+      );
+    }
+    
+    // Approval history - show panel immediately
+    if (_isApprovalHistoryCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.showApprovalHistory,
+        params: {},
+        reason: 'Approval history - instant UI',
+      );
+    }
+    
+    // Command history - show panel immediately
+    if (_isCommandHistoryCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.showCommandHistory,
+        params: {},
+        reason: 'Command history - instant UI',
+      );
+    }
+    
+    // Analytics/Activity - show panel immediately
+    if (_isAnalyticsCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.showAnalytics,
+        params: {},
+        reason: 'Analytics - instant UI',
+      );
+    }
+    
+    // Security settings - show panel immediately
+    if (_isSecurityCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.showSecuritySettings,
+        params: {},
+        reason: 'Security settings - instant UI',
+      );
+    }
+    
+    // About - show panel immediately
+    if (_isAboutCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.showAbout,
+        params: {},
+        reason: 'About - instant UI',
       );
     }
     
@@ -139,6 +219,16 @@ class CommandRouter {
       );
     }
     
+    // Generic swap command - show swap panel
+    if (_isSwapCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.swapTokens,
+        params: {},
+        reason: 'Swap interface - instant UI',
+      );
+    }
+    
     // Send/Transfer with clear parameters
     final sendParams = _parseSendCommand(lowerCommand);
     if (sendParams != null) {
@@ -147,6 +237,16 @@ class CommandRouter {
         action: ActionType.sendSol,
         params: sendParams,
         reason: 'Clear send parameters - show panel directly',
+      );
+    }
+    
+    // Generic send command - show send panel
+    if (_isSendCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.sendSol,
+        params: {},
+        reason: 'Send interface - instant UI',
       );
     }
     
@@ -184,9 +284,71 @@ class CommandRouter {
   
   // History patterns
   static bool _isHistoryCommand(String cmd) {
-    return cmd.contains('history') ||
+    return (cmd.contains('history') && !cmd.contains('approval') && !cmd.contains('command')) ||
            cmd.contains('transactions') ||
            cmd.contains('tx history');
+  }
+  
+  // Wallet management patterns
+  static bool _isWalletManagementCommand(String cmd) {
+    return cmd.contains('manage wallet') ||
+           cmd.contains('my wallets') ||
+           cmd.contains('wallet management') ||
+           cmd.contains('show wallets') ||
+           cmd.contains('list wallets') ||
+           cmd.contains('view wallets');
+  }
+  
+  // EVM wallet patterns
+  static bool _isEvmWalletCommand(String cmd) {
+    return cmd.contains('evm wallet') ||
+           cmd.contains('ethereum wallet') ||
+           cmd.contains('polygon wallet') ||
+           cmd.contains('eth wallet') ||
+           cmd.contains('manage evm');
+  }
+  
+  // Approval history patterns
+  static bool _isApprovalHistoryCommand(String cmd) {
+    return cmd.contains('approval history') ||
+           cmd.contains('past approvals') ||
+           cmd.contains('approved transactions') ||
+           cmd.contains('rejected transactions') ||
+           cmd.contains('show approvals');
+  }
+  
+  // Command history patterns
+  static bool _isCommandHistoryCommand(String cmd) {
+    return cmd.contains('command history') ||
+           cmd.contains('past commands') ||
+           cmd.contains('recent commands') ||
+           cmd.contains('my commands');
+  }
+  
+  // Analytics patterns
+  static bool _isAnalyticsCommand(String cmd) {
+    return cmd.contains('analytics') ||
+           cmd.contains('activity') ||
+           cmd.contains('address activity') ||
+           cmd.contains('wallet activity') ||
+           cmd.contains('my activity');
+  }
+  
+  // Security settings patterns
+  static bool _isSecurityCommand(String cmd) {
+    return cmd.contains('security') ||
+           cmd.contains('limits') ||
+           cmd.contains('security settings') ||
+           cmd.contains('transaction limits') ||
+           cmd.contains('safety settings');
+  }
+  
+  // About patterns
+  static bool _isAboutCommand(String cmd) {
+    return cmd.contains('about') ||
+           cmd.contains('about ordo') ||
+           cmd.contains('what is ordo') ||
+           cmd.contains('help');
   }
   
   // NFT patterns
@@ -228,6 +390,29 @@ class CommandRouter {
   // Bridge patterns
   static bool _isBridgeCommand(String cmd) {
     return cmd.contains('bridge') || cmd.contains('cross-chain');
+  }
+  
+  // Generic swap patterns (for instant UI)
+  static bool _isSwapCommand(String cmd) {
+    return cmd.contains('swap') || 
+           cmd.contains('exchange') || 
+           cmd.contains('convert') ||
+           cmd.contains('trade');
+  }
+  
+  // Generic send/transfer patterns (for instant UI)
+  static bool _isSendCommand(String cmd) {
+    return cmd.contains('send') || cmd.contains('transfer');
+  }
+  
+  // Deposit patterns
+  static bool _isDepositCommand(String cmd) {
+    return cmd.contains('deposit') || 
+           cmd.contains('receive') || 
+           cmd.contains('fund') ||
+           cmd.contains('top up') ||
+           cmd.contains('add funds') ||
+           (cmd.contains('buy') && cmd.contains('crypto'));
   }
   
   // Token risk patterns

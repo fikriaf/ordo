@@ -208,11 +208,11 @@ class _LendingPanelState extends State<LendingPanel> {
                     ),
                     child: Column(
                       children: [
-                        _buildDetailRow('Supply APY', '5.2%', Colors.green),
+                        _buildDetailRow('Supply APY', widget.data['supplyApy']?.toString() ?? '--', Colors.green),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Protocol', 'Solend'),
+                        _buildDetailRow('Protocol', widget.data['protocol']?.toString() ?? '--'),
                         const SizedBox(height: 12),
-                        _buildDetailRow('Collateral Factor', '80%'),
+                        _buildDetailRow('Collateral Factor', widget.data['collateralFactor']?.toString() ?? '--'),
                       ],
                     ),
                   ),
