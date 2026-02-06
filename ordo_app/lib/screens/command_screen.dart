@@ -577,10 +577,6 @@ class _CommandScreenState extends State<CommandScreen> {
         );
     }
   }
-          controller,
-        );
-    }
-  }
 
   Widget _buildInfoPanel(String message, AssistantController controller) {
     return Container(
