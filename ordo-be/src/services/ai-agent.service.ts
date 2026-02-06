@@ -471,7 +471,29 @@ export class AIAgentService {
         throw error;
       });
 
-      const message = response.data.choices[0].message;
+      // Validate response before accessing
+      if (!response || !response.data) {
+        logger.error('No response received from OpenRouter');
+        yield {
+          type: 'error',
+          error: 'No response from AI service',
+        };
+        return;
+      }
+
+      const message = response.data.choices?.[0]?.message;
+      
+      // Validate response structure
+      if (!message) {
+        logger.error('Invalid OpenRouter response - no message in choices', {
+          responseData: JSON.stringify(response.data).substring(0, 500),
+        });
+        yield {
+          type: 'error',
+          error: 'Invalid AI response - no message received',
+        };
+        return;
+      }
 
       // Check if there are tool calls
       if (message.tool_calls && message.tool_calls.length > 0) {
