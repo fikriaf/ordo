@@ -120,6 +120,8 @@ class StatusStrip extends StatelessWidget {
         return (Icons.psychology_outlined, 'Thinking', AppTheme.primary);
       case AssistantState.executing:
         return (Icons.settings_outlined, 'Executing', AppTheme.warning);
+      case AssistantState.completing:
+        return (Icons.check_circle_outline, 'Complete', AppTheme.success);
       case AssistantState.showingPanel:
         return (Icons.dashboard_outlined, 'Active', AppTheme.success);
       case AssistantState.error:

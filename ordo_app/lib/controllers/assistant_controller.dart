@@ -12,6 +12,7 @@ enum AssistantState {
   listening,
   thinking,
   executing,
+  completing, // New state: showing 100% with summary before panel
   showingPanel,
   error,
 }
@@ -29,6 +30,7 @@ class AssistantController extends ChangeNotifier {
   String _partialVoiceInput = '';
   double _progress = 0.0;
   String _currentPhase = '';
+  String? _completionSummary; // Summary to show during completing state
   
   AssistantController({
     required this.apiClient,
@@ -45,6 +47,7 @@ class AssistantController extends ChangeNotifier {
   String get partialVoiceInput => _partialVoiceInput;
   double get progress => _progress;
   String get currentPhase => _currentPhase;
+  String? get completionSummary => _completionSummary;
   
   // Legacy getter for compatibility
   List<String> get reasoningSteps => 
@@ -53,7 +56,8 @@ class AssistantController extends ChangeNotifier {
   bool get isLoading => 
       _state == AssistantState.listening ||
       _state == AssistantState.thinking ||
-      _state == AssistantState.executing;
+      _state == AssistantState.executing ||
+      _state == AssistantState.completing;
   
   // Add process step
   void _addStep(AIProcessStep step) {
@@ -78,6 +82,22 @@ class AssistantController extends ChangeNotifier {
     _progress = value.clamp(0.0, 1.0);
     _currentPhase = phase;
     notifyListeners();
+  }
+  
+  // Transition to completing state with summary, then show panel after delay
+  Future<void> _completeWithSummary(String? summary) async {
+    // Set to completing state with summary
+    _completionSummary = summary ?? 'Task completed';
+    _setProgress(1.0, 'Complete');
+    _setState(AssistantState.completing);
+    
+    // Wait 300ms to show the completion animation
+    await Future.delayed(const Duration(milliseconds: 300));
+    
+    // Then show the panel
+    if (_state == AssistantState.completing) {
+      _setState(AssistantState.showingPanel);
+    }
   }
   
   // Process command with smart routing
@@ -146,7 +166,6 @@ class AssistantController extends ChangeNotifier {
     final response = await apiClient.get(route.apiEndpoint!);
     
     _updateStep('fetch', StepStatus.completed);
-    _setProgress(1.0, 'Complete');
     
     print('🔵 Direct API response: $response');
     
@@ -161,7 +180,8 @@ class AssistantController extends ChangeNotifier {
     // Record successful command
     contextService.recordCommand(_currentCommand);
     
-    _setState(AssistantState.showingPanel);
+    // Complete with summary and transition
+    await _completeWithSummary('Data fetched successfully');
   }
   
   // Handle local panel (no API, just show UI)
@@ -293,7 +313,6 @@ class AssistantController extends ChangeNotifier {
         final response = await apiClient.sendMessage(command);
         
         _updateStep('fallback', StepStatus.completed);
-        _setProgress(1.0, 'Complete');
         
         // Non-streaming response is already structured
         _currentAction = CommandAction.fromApiResponse(response);
@@ -304,8 +323,8 @@ class AssistantController extends ChangeNotifier {
         // Record successful command
         contextService.recordCommand(command);
         
-        // Show panel
-        _setState(AssistantState.showingPanel);
+        // Complete with summary and transition
+        await _completeWithSummary(_currentAction?.summary);
         return;
       }
       
@@ -325,7 +344,6 @@ class AssistantController extends ChangeNotifier {
           title: 'Processing complete',
           status: StepStatus.completed,
         ));
-        _setProgress(1.0, 'Complete');
         
         Map<String, dynamic> response;
         try {
@@ -364,8 +382,8 @@ class AssistantController extends ChangeNotifier {
       // Record successful command
       contextService.recordCommand(command);
       
-      // Show panel
-      _setState(AssistantState.showingPanel);
+      // Complete with summary and transition
+      await _completeWithSummary(_currentAction?.summary);
       
     } catch (e) {
       print('🔴 AI Agent error: $e');
@@ -459,6 +477,7 @@ class AssistantController extends ChangeNotifier {
     _processSteps = [];
     _progress = 0.0;
     _currentPhase = '';
+    _completionSummary = null;
     notifyListeners();
   }
   

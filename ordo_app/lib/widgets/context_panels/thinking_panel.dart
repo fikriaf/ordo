@@ -7,6 +7,8 @@ class ThinkingPanel extends StatefulWidget {
   final double progress;
   final String currentPhase;
   final String command;
+  final String? completionSummary; // Summary to show when completing
+  final bool isCompleting; // Whether we're in completing state
   
   // Legacy support
   final List<String>? steps;
@@ -17,6 +19,8 @@ class ThinkingPanel extends StatefulWidget {
     this.progress = 0.0,
     this.currentPhase = '',
     this.command = '',
+    this.completionSummary,
+    this.isCompleting = false,
     this.steps, // Legacy
   });
 
@@ -217,14 +221,53 @@ class _ThinkingPanelState extends State<ThinkingPanel>
           
           const SizedBox(height: 4),
           
-          Text(
-            'Processing',
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 12,
-              letterSpacing: 1,
+          // Show summary when completing, otherwise show "Processing"
+          if (widget.isCompleting && widget.completionSummary != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.success.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppTheme.success.withOpacity(0.3),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.check_circle,
+                    size: 16,
+                    color: AppTheme.success,
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      widget.completionSummary!,
+                      style: TextStyle(
+                        color: AppTheme.success,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
+          ] else
+            Text(
+              'Processing',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+                letterSpacing: 1,
+              ),
+            ),
         ],
       ),
     );

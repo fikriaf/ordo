@@ -449,6 +449,16 @@ class _CommandScreenState extends State<CommandScreen> {
           command: controller.currentCommand,
         );
       
+      case AssistantState.completing:
+        return ThinkingPanel(
+          processSteps: controller.processSteps,
+          progress: controller.progress,
+          currentPhase: controller.currentPhase,
+          command: controller.currentCommand,
+          completionSummary: controller.completionSummary,
+          isCompleting: true,
+        );
+      
       case AssistantState.showingPanel:
         return _buildActionPanel(controller);
       
