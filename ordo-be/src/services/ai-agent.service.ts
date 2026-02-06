@@ -65,14 +65,8 @@ export class AIAgentService {
         // Get available tools from plugins and MCP servers (filtered by user message)
         const tools = await this.getAllAvailableTools(userMessage);
 
-        // Build messages array
+        // Build messages array - SIMPLIFIED, no system prompt
         const messages: Message[] = [
-          {
-            role: 'system',
-            content: `You are Ordo, an AI assistant that helps users interact with Solana blockchain. 
-You can execute various blockchain operations through function calls.
-Always be helpful, concise, and accurate. When users ask to perform blockchain operations, use the available tools.`,
-          },
           ...conversationHistory,
           {
             role: 'user',
@@ -408,13 +402,8 @@ Always be helpful, concise, and accurate. When users ask to perform blockchain o
       const currentModel = this.getCurrentModel();
       const tools = await this.getAllAvailableTools(userMessage); // Pass userMessage for filtering
 
+      // SIMPLIFIED - no system prompt
       const messages: Message[] = [
-        {
-          role: 'system',
-          content: `You are Ordo, an AI assistant that helps users interact with Solana blockchain. 
-You can execute various blockchain operations through function calls.
-Always be helpful, concise, and accurate.`,
-        },
         ...conversationHistory,
         {
           role: 'user',
@@ -446,7 +435,33 @@ Always be helpful, concise, and accurate.`,
           },
           timeout: 15000, // Reduced from 30000
         }
-      );
+      ).catch(async (error) => {
+        // If 400 error, retry without tools (fallback)
+        if (error.response?.status === 400) {
+          logger.warn('Request failed with 400, retrying without tools', {
+            error: error.response?.data,
+          });
+          
+          return axios.post(
+            `${this.baseURL}/chat/completions`,
+            {
+              model: currentModel,
+              messages,
+              stream: false,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${this.apiKey}`,
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://ordo.app',
+                'X-Title': 'Ordo AI Assistant',
+              },
+              timeout: 15000,
+            }
+          );
+        }
+        throw error;
+      });
 
       const message = response.data.choices[0].message;
 
