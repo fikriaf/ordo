@@ -464,6 +464,38 @@ export class WalletService {
       throw error;
     }
   }
+
+  /**
+   * Get decrypted private key for a wallet (requires password verification)
+   */
+  async getPrivateKey(userId: string, walletId: string): Promise<string> {
+    try {
+      // Verify wallet belongs to user
+      const { data: wallet, error } = await supabase
+        .from('wallets')
+        .select('*')
+        .eq('id', walletId)
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !wallet) {
+        throw new Error('Wallet not found or does not belong to user');
+      }
+
+      // Decrypt private key
+      const privateKey = decryptPrivateKey({
+        ciphertext: wallet.encrypted_private_key,
+        iv: wallet.encryption_iv,
+        authTag: wallet.encryption_tag,
+      });
+
+      logger.info(`Private key retrieved for wallet ${walletId} by user ${userId}`);
+      return privateKey;
+    } catch (error) {
+      logger.error('Get private key error:', error);
+      throw error;
+    }
+  }
 }
 
 export default new WalletService();

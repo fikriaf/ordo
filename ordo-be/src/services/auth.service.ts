@@ -132,6 +132,29 @@ export class AuthService {
       throw error;
     }
   }
+
+  /**
+   * Verify user password for sensitive operations
+   */
+  async verifyPassword(userId: string, password: string): Promise<boolean> {
+    try {
+      const { data: user, error } = await supabase
+        .from('users')
+        .select('password_hash')
+        .eq('id', userId)
+        .single();
+
+      if (error || !user) {
+        throw new Error('User not found');
+      }
+
+      const isValid = await bcrypt.compare(password, user.password_hash);
+      return isValid;
+    } catch (error) {
+      logger.error('Password verification error:', error);
+      throw error;
+    }
+  }
 }
 
 export default new AuthService();
