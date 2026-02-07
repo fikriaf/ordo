@@ -8,6 +8,8 @@ class IndexedCommand {
   final String tag;
   final bool requiresAuth;
   final int priority;
+  final bool needsInput; // Flag for commands that need user to complete
+  final String? example; // Example text to show when needsInput is true
 
   const IndexedCommand({
     required this.keywords,
@@ -17,6 +19,8 @@ class IndexedCommand {
     required this.tag,
     this.requiresAuth = false,
     this.priority = 0,
+    this.needsInput = false, // Default: execute directly
+    this.example, // Optional example
   });
 }
 
@@ -55,10 +59,12 @@ class CommandIndexService {
       keywords: ['swap', 'exchange', 'convert', 'trade'],
       icon: 'repeat',
       label: 'Swap tokens',
-      template: 'swap tokens',
+      template: 'swap ',
       tag: '[swap]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: swap 1 sol to usdc',
     ),
     IndexedCommand(
       keywords: ['swap sol', 'swap 1 sol'],
@@ -75,19 +81,23 @@ class CommandIndexService {
       keywords: ['send', 'transfer', 'pay'],
       icon: 'send',
       label: 'Send tokens',
-      template: 'send tokens',
+      template: 'send ',
       tag: '[send]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: send 0.5 sol to <address>',
     ),
     IndexedCommand(
       keywords: ['send sol', 'transfer sol'],
       icon: 'send',
       label: 'Send SOL',
-      template: 'send sol',
+      template: 'send ',
       tag: '[send]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: send 0.5 sol to <address>',
     ),
     
     // Price Commands
@@ -113,64 +123,78 @@ class CommandIndexService {
       keywords: ['stake', 'staking'],
       icon: 'coins',
       label: 'Stake SOL',
-      template: 'stake sol',
+      template: 'stake ',
       tag: '[stake]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: stake 5 sol',
     ),
     IndexedCommand(
       keywords: ['unstake', 'unstaking', 'withdraw stake', 'withdraw staked'],
       icon: 'coins',
       label: 'Unstake SOL',
-      template: 'unstake sol',
+      template: 'unstake ',
       tag: '[unstake]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: unstake 5 sol',
     ),
     IndexedCommand(
       keywords: ['lend', 'lending'],
       icon: 'hand_coins',
       label: 'Lend assets',
-      template: 'lend assets',
+      template: 'lend ',
       tag: '[lend]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: lend 100 usdc',
     ),
     IndexedCommand(
       keywords: ['borrow', 'borrowing'],
       icon: 'hand_coins',
       label: 'Borrow assets',
-      template: 'borrow assets',
+      template: 'borrow ',
       tag: '[borrow]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: borrow 50 usdc',
     ),
     IndexedCommand(
       keywords: ['liquidity', 'add liquidity', 'pool'],
       icon: 'droplet',
       label: 'Add liquidity',
-      template: 'add liquidity',
+      template: 'add liquidity ',
       tag: '[liquidity]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: add liquidity sol-usdc',
     ),
     IndexedCommand(
       keywords: ['remove liquidity', 'withdraw liquidity', 'remove pool'],
       icon: 'droplet',
       label: 'Remove liquidity',
-      template: 'remove liquidity',
+      template: 'remove liquidity ',
       tag: '[liquidity]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: remove liquidity sol-usdc',
     ),
     IndexedCommand(
       keywords: ['bridge', 'cross-chain'],
       icon: 'bridge',
       label: 'Bridge assets',
-      template: 'bridge assets',
+      template: 'bridge ',
       tag: '[bridge]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: bridge 1 sol to ethereum',
     ),
     
     // NFT Commands
@@ -187,28 +211,34 @@ class CommandIndexService {
       keywords: ['mint', 'mint nft', 'create nft'],
       icon: 'image',
       label: 'Mint NFT',
-      template: 'mint nft',
+      template: 'mint nft ',
       tag: '[nft]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: mint nft "My Art" with image.png',
     ),
     IndexedCommand(
       keywords: ['send nft', 'transfer nft'],
       icon: 'send',
       label: 'Send NFT',
-      template: 'send nft',
+      template: 'send nft ',
       tag: '[nft]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: send nft <mint_address> to <address>',
     ),
     IndexedCommand(
       keywords: ['burn nft', 'delete nft'],
       icon: 'delete',
       label: 'Burn NFT',
-      template: 'burn nft',
+      template: 'burn nft ',
       tag: '[nft]',
       requiresAuth: true,
       priority: 5,
+      needsInput: true,
+      example: 'Example: burn nft <mint_address>',
     ),
     
     // Portfolio Commands
@@ -236,9 +266,11 @@ class CommandIndexService {
       keywords: ['risk', 'token risk', 'analyze token', 'safe'],
       icon: 'shield',
       label: 'Analyze token risk',
-      template: 'analyze token risk',
+      template: 'analyze risk of ',
       tag: '[risk]',
       priority: 5,
+      needsInput: true,
+      example: 'Example: analyze risk of BONK',
     ),
     IndexedCommand(
       keywords: ['risk bonk', 'bonk safe', 'analyze bonk'],
@@ -341,6 +373,133 @@ class CommandIndexService {
       tag: '[about]',
       priority: 5,
     ),
+    
+    // Network Settings Commands
+    IndexedCommand(
+      keywords: ['network', 'network settings', 'change network', 'switch network'],
+      icon: 'globe',
+      label: 'Network settings',
+      template: 'network settings',
+      tag: '[network]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    IndexedCommand(
+      keywords: ['mainnet', 'switch to mainnet', 'use mainnet', 'production network'],
+      icon: 'globe',
+      label: 'Switch to Mainnet',
+      template: 'switch to mainnet',
+      tag: '[network]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    IndexedCommand(
+      keywords: ['devnet', 'switch to devnet', 'use devnet', 'development network'],
+      icon: 'globe',
+      label: 'Switch to Devnet',
+      template: 'switch to devnet',
+      tag: '[network]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    IndexedCommand(
+      keywords: ['testnet', 'switch to testnet', 'use testnet', 'test network'],
+      icon: 'globe',
+      label: 'Switch to Testnet',
+      template: 'switch to testnet',
+      tag: '[network]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    
+    // Voice Input Commands
+    IndexedCommand(
+      keywords: ['voice', 'voice input', 'speak', 'use voice', 'microphone'],
+      icon: 'mic',
+      label: 'Use voice input',
+      template: 'use voice input',
+      tag: '[voice]',
+      priority: 5,
+    ),
+    
+    // Slippage Settings Commands
+    IndexedCommand(
+      keywords: ['slippage', 'set slippage', 'slippage tolerance', 'change slippage'],
+      icon: 'sliders',
+      label: 'Set slippage',
+      template: 'set slippage tolerance',
+      tag: '[settings]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    IndexedCommand(
+      keywords: ['slippage 1', 'set slippage 1', '1% slippage'],
+      icon: 'sliders',
+      label: 'Set slippage to 1%',
+      template: 'set slippage to 1%',
+      tag: '[settings]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    
+    // Import Wallet Commands
+    IndexedCommand(
+      keywords: ['import', 'import wallet', 'restore wallet', 'import private key'],
+      icon: 'download',
+      label: 'Import wallet',
+      template: 'import wallet',
+      tag: '[wallet]',
+      priority: 5,
+    ),
+    IndexedCommand(
+      keywords: ['import solana', 'import solana wallet', 'restore solana wallet'],
+      icon: 'download',
+      label: 'Import Solana wallet',
+      template: 'import solana wallet',
+      tag: '[wallet]',
+      priority: 5,
+    ),
+    IndexedCommand(
+      keywords: ['import evm', 'import evm wallet', 'import ethereum', 'restore evm'],
+      icon: 'download',
+      label: 'Import EVM wallet',
+      template: 'import evm wallet',
+      tag: '[wallet]',
+      priority: 5,
+    ),
+    
+    // Switch Wallet Commands
+    IndexedCommand(
+      keywords: ['switch', 'switch wallet', 'change wallet', 'use different wallet'],
+      icon: 'repeat',
+      label: 'Switch wallet',
+      template: 'switch wallet ',
+      tag: '[wallet]',
+      requiresAuth: true,
+      priority: 5,
+      needsInput: true,
+      example: 'Example: switch wallet to wallet-2',
+    ),
+    
+    // Faucet Commands
+    IndexedCommand(
+      keywords: ['faucet', 'get test tokens', 'airdrop', 'request tokens', 'free tokens'],
+      icon: 'droplet',
+      label: 'Get test tokens',
+      template: 'request faucet',
+      tag: '[faucet]',
+      requiresAuth: true,
+      priority: 5,
+    ),
+    IndexedCommand(
+      keywords: ['devnet faucet', 'get devnet sol', 'test sol', 'free sol'],
+      icon: 'droplet',
+      label: 'Get devnet SOL',
+      template: 'get devnet sol from faucet',
+      tag: '[faucet]',
+      requiresAuth: true,
+      priority: 5,
+    ),
   ];
 
   /// Search commands based on query
@@ -370,6 +529,8 @@ class CommandIndexService {
               label: scored.command.label,
               template: scored.command.template,
               tag: scored.command.tag,
+              needsInput: scored.command.needsInput,
+              example: scored.command.example,
             ))
         .toList();
   }
@@ -414,6 +575,8 @@ class CommandIndexService {
               label: cmd.label,
               template: cmd.template,
               tag: cmd.tag,
+              needsInput: cmd.needsInput,
+              example: cmd.example,
             ))
         .toList();
   }
@@ -503,6 +666,8 @@ class CommandIndexService {
               label: cmd.label,
               template: cmd.template,
               tag: cmd.tag,
+              needsInput: cmd.needsInput,
+              example: cmd.example,
             ))
         .toList();
   }

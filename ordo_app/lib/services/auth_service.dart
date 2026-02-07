@@ -14,22 +14,28 @@ class AuthService extends ChangeNotifier {
   Map<String, dynamic>? get user => _user;
   String? get token => _token;
 
-  /// Initialize - load saved token
+  /// Initialize - load saved token and user data
   Future<void> initialize() async {
     print('🔵 AuthService: Initializing...');
     _token = await _storage.read(key: 'auth_token');
     print('🔵 AuthService: Token loaded: ${_token != null ? "YES" : "NO"}');
     
-    // Skip profile loading for now - just check if token exists
-    // Profile will be loaded on first API call if needed
+    // Load saved user data
     if (_token != null) {
-      print('🔵 AuthService: Token exists, user is authenticated');
-      // Don't load profile - it will cause logout if endpoint doesn't exist
-      // await _loadUserProfile();
+      final userJson = await _storage.read(key: 'user_data');
+      if (userJson != null) {
+        try {
+          _user = jsonDecode(userJson);
+          print('🔵 AuthService: User data loaded: ${_user?['email']}');
+        } catch (e) {
+          print('🔴 AuthService: Failed to parse user data: $e');
+          _user = null;
+        }
+      }
     }
     
     notifyListeners();
-    print('🔵 AuthService: Initialized. isAuthenticated=$isAuthenticated');
+    print('🔵 AuthService: Initialized. isAuthenticated=$isAuthenticated, user=${_user?['email']}');
   }
 
   /// Register new user
@@ -77,10 +83,11 @@ class AuthService extends ChangeNotifier {
         _token = data['token'];
         _user = data['user'];
         
-        // Save token
+        // Save token and user data
         await _storage.write(key: 'auth_token', value: _token);
+        await _storage.write(key: 'user_data', value: jsonEncode(_user));
         
-        print('🔵 Register success! Token saved.');
+        print('🔵 Register success! Token and user data saved.');
         notifyListeners();
         
         return {'success': true, 'user': _user};
@@ -138,10 +145,11 @@ class AuthService extends ChangeNotifier {
         _token = data['token'];
         _user = data['user'];
         
-        // Save token
+        // Save token and user data
         await _storage.write(key: 'auth_token', value: _token);
+        await _storage.write(key: 'user_data', value: jsonEncode(_user));
         
-        print('🔵 Login success! Token saved.');
+        print('🔵 Login success! Token and user data saved.');
         notifyListeners();
         
         return {'success': true, 'user': _user};
@@ -161,8 +169,9 @@ class AuthService extends ChangeNotifier {
     _token = null;
     _user = null;
     await _storage.delete(key: 'auth_token');
+    await _storage.delete(key: 'user_data');
     notifyListeners();
-    print('🔵 Logout complete. Token deleted.');
+    print('🔵 Logout complete. Token and user data deleted.');
   }
 
   /// Load user profile

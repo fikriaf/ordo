@@ -106,6 +106,26 @@ class CommandRouter {
       );
     }
     
+    // Network settings - show panel immediately
+    if (_isNetworkCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.networkSettings,
+        params: {},
+        reason: 'Network settings - instant UI',
+      );
+    }
+    
+    // Faucet - show panel immediately
+    if (_isFaucetCommand(lowerCommand)) {
+      return CommandRoute(
+        type: RouteType.localPanel,
+        action: ActionType.faucet,
+        params: {},
+        reason: 'Faucet - instant UI',
+      );
+    }
+    
     // About - show panel immediately
     if (_isAboutCommand(lowerCommand)) {
       return CommandRoute(
@@ -397,11 +417,32 @@ class CommandRouter {
   
   // Security settings patterns
   static bool _isSecurityCommand(String cmd) {
-    return cmd.contains('security') ||
+    return (cmd.contains('security') ||
            cmd.contains('limits') ||
            cmd.contains('security settings') ||
            cmd.contains('transaction limits') ||
-           cmd.contains('safety settings');
+           cmd.contains('safety settings')) &&
+           !cmd.contains('network'); // Exclude network security
+  }
+  
+  // Network settings patterns
+  static bool _isNetworkCommand(String cmd) {
+    return cmd.contains('network') ||
+           cmd.contains('mainnet') ||
+           cmd.contains('devnet') ||
+           cmd.contains('testnet') ||
+           cmd.contains('rpc') ||
+           cmd.contains('switch network') ||
+           cmd.contains('change network');
+  }
+  
+  // Faucet patterns
+  static bool _isFaucetCommand(String cmd) {
+    return cmd.contains('faucet') ||
+           cmd.contains('airdrop') ||
+           cmd.contains('test tokens') ||
+           cmd.contains('free tokens') ||
+           (cmd.contains('get') && cmd.contains('devnet'));
   }
   
   // About patterns
@@ -434,11 +475,13 @@ class CommandRouter {
     return cmd.contains('burn') && cmd.contains('nft');
   }
   
-  // Settings patterns
+  // Settings patterns (general preferences, NOT network or security)
   static bool _isSettingsCommand(String cmd) {
-    return cmd.contains('settings') ||
+    return (cmd.contains('settings') ||
            cmd.contains('preferences') ||
-           cmd.contains('config');
+           cmd.contains('config')) &&
+           !cmd.contains('network') &&
+           !cmd.contains('security');
   }
   
   // Staking patterns

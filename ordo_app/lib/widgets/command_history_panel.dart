@@ -25,11 +25,18 @@ class _CommandHistoryPanelState extends State<CommandHistoryPanel> {
   bool _isLoading = true;
   bool _isLoadingMessages = false;
   String? _errorMessage;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _loadConversations();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadConversations() async {
@@ -55,10 +62,11 @@ class _CommandHistoryPanelState extends State<CommandHistoryPanel> {
         }
         
         setState(() {
+          // Keep original order (oldest first)
           _conversations = convList.map((c) => Map<String, dynamic>.from(c)).toList();
-          // Auto-select the most recent conversation
+          // Auto-select the most recent conversation (last in list)
           if (_conversations.isNotEmpty && _selectedConversationId == null) {
-            _selectedConversationId = _conversations.first['id']?.toString();
+            _selectedConversationId = _conversations.last['id']?.toString();
             _loadMessages(_selectedConversationId!);
           }
         });
@@ -98,6 +106,7 @@ class _CommandHistoryPanelState extends State<CommandHistoryPanel> {
         }
         
         setState(() {
+          // Keep original order (oldest first)
           _messages = msgList.map((m) => Map<String, dynamic>.from(m)).toList();
         });
       }
@@ -228,98 +237,31 @@ class _CommandHistoryPanelState extends State<CommandHistoryPanel> {
 
     return Container(
       constraints: const BoxConstraints(maxHeight: 450),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Conversations list (left sidebar) - compact
-          Container(
-            width: 70,
-            decoration: BoxDecoration(
-              border: Border(
-                right: BorderSide(color: Colors.white.withOpacity(0.1)),
+      child: _isLoadingMessages
+          ? const Center(
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.purple),
               ),
-            ),
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: _conversations.length,
-              itemBuilder: (context, index) {
-                final conv = _conversations[index];
-                final convId = conv['id']?.toString() ?? '';
-                final isSelected = _selectedConversationId == convId;
-                final createdAt = DateTime.tryParse(conv['createdAt']?.toString() ?? '');
-                
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedConversationId = convId;
-                    });
-                    _loadMessages(convId);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: isSelected ? Colors.purple.withOpacity(0.2) : Colors.transparent,
-                      border: Border(
-                        left: BorderSide(
-                          color: isSelected ? Colors.purple : Colors.transparent,
-                          width: 3,
-                        ),
-                      ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _formatDate(createdAt),
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : Colors.white.withOpacity(0.7),
-                            fontSize: 10,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          _formatTime(createdAt),
-                          style: TextStyle(
-                            color: Colors.white.withOpacity(0.5),
-                            fontSize: 9,
-                          ),
-                        ),
-                      ],
-                    ),
+            )
+          : _messages.isEmpty
+              ? Center(
+                  child: Text(
+                    'No messages in this conversation',
+                    style: TextStyle(color: Colors.white.withOpacity(0.5)),
                   ),
-                );
-              },
-            ),
-          ),
-          
-          // Messages (right content)
-          Expanded(
-            child: _isLoadingMessages
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.purple),
-                    ),
-                  )
-                : _messages.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No messages in this conversation',
-                          style: TextStyle(color: Colors.white.withOpacity(0.5)),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final msg = _messages[index];
-                          return _buildMessageItem(msg);
-                        },
-                      ),
-          ),
-        ],
-      ),
+                )
+              : ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  reverse: true, // Start from bottom
+                  itemCount: _messages.length,
+                  itemBuilder: (context, index) {
+                    // Reverse index to show oldest first when scrolling up
+                    final msg = _messages[_messages.length - 1 - index];
+                    return _buildMessageItem(msg);
+                  },
+                ),
     );
   }
 
@@ -341,14 +283,24 @@ class _CommandHistoryPanelState extends State<CommandHistoryPanel> {
             decoration: BoxDecoration(
               color: isUser 
                   ? Colors.blue.withOpacity(0.2) 
-                  : Colors.purple.withOpacity(0.2),
+                  : AppTheme.primary.withOpacity(0.2),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(
-              isUser ? Icons.person : Icons.smart_toy,
-              color: isUser ? Colors.blue : Colors.purple,
-              size: 16,
-            ),
+            child: isUser
+                ? const Icon(
+                    Icons.person,
+                    color: Colors.blue,
+                    size: 16,
+                  )
+                : ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Image.asset(
+                      'assets/images/logo_ordo.png',
+                      width: 16,
+                      height: 16,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
           ),
           const SizedBox(width: 10),
           // Message content
@@ -361,7 +313,7 @@ class _CommandHistoryPanelState extends State<CommandHistoryPanel> {
                     Text(
                       isUser ? 'You' : 'ORDO',
                       style: TextStyle(
-                        color: isUser ? Colors.blue : Colors.purple,
+                        color: isUser ? Colors.blue : AppTheme.primary,
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),

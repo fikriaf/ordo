@@ -40,10 +40,14 @@ class ApprovalPanel extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(
-                    Icons.terminal,
-                    size: 20,
-                    color: AppTheme.primary,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Image.asset(
+                      'assets/images/logo_ordo.png',
+                      width: 20,
+                      height: 20,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(

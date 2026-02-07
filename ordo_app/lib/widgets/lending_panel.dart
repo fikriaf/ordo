@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/token_logo_service.dart';
 
 class LendingPanel extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -411,23 +412,10 @@ class _LendingPanelState extends State<LendingPanel> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: AppTheme.primary.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Text(
-                _selectedAsset.isNotEmpty ? _selectedAsset[0] : 'T',
-                style: const TextStyle(
-                  color: AppTheme.primary,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+          TokenLogoService.buildTokenLogo(
+            symbol: _selectedAsset,
+            size: 32,
+            fallbackColor: AppTheme.primary,
           ),
           const SizedBox(width: 12),
           Expanded(

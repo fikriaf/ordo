@@ -275,6 +275,12 @@ function detectActionTypeFromMessage(message: string): ActionType {
   
   const lowerMessage = message.toLowerCase();
   
+  // Risk analysis detection (prioritize this to avoid false positives)
+  if ((lowerMessage.includes('risk') || lowerMessage.includes('safe') || lowerMessage.includes('analyze')) &&
+      (lowerMessage.includes('token') || lowerMessage.includes('mint') || lowerMessage.includes('address'))) {
+    return 'token_risk';
+  }
+  
   // Network settings detection
   if (lowerMessage.includes('devnet') || lowerMessage.includes('mainnet') || 
       lowerMessage.includes('testnet') || lowerMessage.includes('network')) {
@@ -290,17 +296,21 @@ function detectActionTypeFromMessage(message: string): ActionType {
     return 'faucet';
   }
   
-  // Wallet operations
-  if (lowerMessage.includes('wallet') && 
-      (lowerMessage.includes('create') || lowerMessage.includes('buat'))) {
-    return 'create_wallet';
-  }
-  
-  // Delete wallet detection
-  if (lowerMessage.includes('wallet') && 
-      (lowerMessage.includes('delete') || lowerMessage.includes('hapus') || 
-       lowerMessage.includes('remove') || lowerMessage.includes('removed'))) {
-    return 'delete_wallet';
+  // Wallet operations - be more specific to avoid false positives
+  if (lowerMessage.includes('wallet')) {
+    // Delete wallet - must have explicit delete/remove intent
+    if ((lowerMessage.includes('delete') || lowerMessage.includes('hapus') || 
+         lowerMessage.includes('remove')) &&
+        (lowerMessage.includes('successfully') || lowerMessage.includes('berhasil') ||
+         lowerMessage.includes('deleted') || lowerMessage.includes('removed'))) {
+      return 'delete_wallet';
+    }
+    
+    // Create wallet
+    if (lowerMessage.includes('create') || lowerMessage.includes('buat') ||
+        lowerMessage.includes('created') || lowerMessage.includes('new wallet')) {
+      return 'create_wallet';
+    }
   }
   
   // Balance check

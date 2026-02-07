@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/token_logo_service.dart';
 
 class BridgePanel extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -526,23 +527,10 @@ class _BridgePanelState extends State<BridgePanel> {
       ),
       child: Row(
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Text(
-                chain[0],
-                style: TextStyle(
-                  color: color,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+          TokenLogoService.buildChainLogo(
+            chainId: chain.toLowerCase(),
+            size: 32,
+            fallbackColor: color,
           ),
           const SizedBox(width: 12),
           Expanded(

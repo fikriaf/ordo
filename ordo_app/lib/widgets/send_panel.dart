@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
+import '../services/token_logo_service.dart';
 
 class SendPanel extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -150,7 +151,17 @@ class _SendPanelState extends State<SendPanel> {
                     items: _tokens.map((token) {
                       return DropdownMenuItem(
                         value: token,
-                        child: Text(token),
+                        child: Row(
+                          children: [
+                            TokenLogoService.buildTokenLogo(
+                              symbol: token,
+                              size: 20,
+                              fallbackColor: AppTheme.primary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(token),
+                          ],
+                        ),
                       );
                     }).toList(),
                     onChanged: (value) {

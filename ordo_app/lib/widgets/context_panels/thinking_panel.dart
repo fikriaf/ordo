@@ -339,10 +339,14 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                   color: AppTheme.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.terminal,
-                  size: 18,
-                  color: AppTheme.primary,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Image.asset(
+                    'assets/images/logo_ordo.png',
+                    width: 18,
+                    height: 18,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
               const SizedBox(width: 12),

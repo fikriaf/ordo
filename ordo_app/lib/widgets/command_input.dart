@@ -43,13 +43,15 @@ class CommandInput extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Command icon
-                Icon(
-                  Icons.terminal,
-                  size: 20,
-                  color: focusNode.hasFocus
-                      ? AppTheme.primary
-                      : AppTheme.textSecondary,
+                // Ordo logo icon
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: Image.asset(
+                    'assets/images/logo_ordo.png',
+                    width: 20,
+                    height: 20,
+                    fit: BoxFit.cover,
+                  ),
                 ),
                 
                 const SizedBox(width: 12),
@@ -73,19 +75,33 @@ class CommandInput extends StatelessWidget {
                 
                 const SizedBox(width: 12),
                 
-                // Voice button
-                GestureDetector(
-                  onLongPress: onVoiceInput,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.mic_none,
-                      size: 18,
-                      color: AppTheme.primary,
+                // Voice button with tooltip
+                Tooltip(
+                  message: 'Long press to speak',
+                  preferBelow: false,
+                  child: GestureDetector(
+                    onTap: () {
+                      // Show snackbar hint on single tap
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('💡 Long press microphone to speak'),
+                          duration: Duration(seconds: 2),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    },
+                    onLongPress: onVoiceInput,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.mic_none,
+                        size: 18,
+                        color: AppTheme.primary,
+                      ),
                     ),
                   ),
                 ),

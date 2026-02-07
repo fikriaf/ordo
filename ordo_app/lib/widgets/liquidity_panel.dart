@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/token_logo_service.dart';
 
 class LiquidityPanel extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -372,11 +373,24 @@ class _LiquidityPanelState extends State<LiquidityPanel> {
         hintStyle: TextStyle(
           color: Colors.white.withOpacity(0.3),
         ),
-        suffixText: token,
-        suffixStyle: const TextStyle(
-          color: Colors.blue,
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
+        suffix: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TokenLogoService.buildTokenLogo(
+              symbol: token,
+              size: 16,
+              fallbackColor: Colors.blue,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              token,
+              style: const TextStyle(
+                color: Colors.blue,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
         ),
         filled: true,
         fillColor: Colors.white.withOpacity(0.05),

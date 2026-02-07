@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../theme/app_theme.dart';
 import '../services/binance_api.dart';
+import '../services/token_logo_service.dart';
 
 class PriceChartPanel extends StatefulWidget {
   final Map<String, dynamic> data;

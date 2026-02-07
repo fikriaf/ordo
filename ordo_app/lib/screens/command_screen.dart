@@ -34,6 +34,7 @@ import '../widgets/command_history_panel.dart';
 import '../widgets/analytics_panel.dart';
 import '../widgets/security_settings_panel.dart';
 import '../widgets/price_chart_panel.dart';
+import '../widgets/sliding_chart_panel.dart';
 import '../services/command_index.dart';
 import '../models/command_action.dart';
 import '../theme/app_theme.dart';
@@ -51,6 +52,7 @@ class _CommandScreenState extends State<CommandScreen> {
   final FocusNode _focusNode = FocusNode();
   List<SuggestionItem> _suggestions = [];
   OverlayEntry? _overlayEntry;
+  bool _isChartPanelOpen = false;
 
   @override
   void initState() {
@@ -90,6 +92,10 @@ class _CommandScreenState extends State<CommandScreen> {
   void _updateSuggestions(String query) {
     setState(() {
       _suggestions = CommandIndexService.search(query, limit: 5);
+      print('🔍 Suggestions updated: ${_suggestions.length} items');
+      if (_suggestions.isNotEmpty) {
+        print('   First suggestion: ${_suggestions.first.label} (needsInput: ${_suggestions.first.needsInput})');
+      }
     });
     
     // Only update overlay if already showing OR if there's a query
@@ -112,12 +118,16 @@ class _CommandScreenState extends State<CommandScreen> {
         // Input area height (CommandInput + bottom padding)
         const inputAreaHeight = 80.0;
         final screenHeight = MediaQuery.of(context).size.height;
+        final screenWidth = MediaQuery.of(context).size.width;
         // Max height for suggestions (50% of available space)
         final maxSuggestionsHeight = (screenHeight - keyboardHeight - inputAreaHeight - 100) * 0.6;
         
+        // Adjust right position if chart panel is open
+        final rightOffset = _isChartPanelOpen ? screenWidth * 0.85 : 0.0;
+        
         return Positioned(
           left: 0,
-          right: 0,
+          right: rightOffset,
           // Don't cover the input area at the bottom
           bottom: keyboardHeight + inputAreaHeight + 16, // Above input area
           top: 0,
@@ -143,9 +153,9 @@ class _CommandScreenState extends State<CommandScreen> {
                         ),
                         child: SuggestionsPanel(
                           suggestions: _suggestions,
-                          onSuggestionTap: (template) {
-                            _removeOverlay();
-                            _onSuggestionTap(template);
+                          onSuggestionTap: (suggestion) {
+                            _onSuggestionTap(suggestion);
+                            // Remove overlay handled in _onSuggestionTap based on needsInput
                           },
                           onClose: () {
                             _removeOverlay();
@@ -171,11 +181,181 @@ class _CommandScreenState extends State<CommandScreen> {
     _overlayEntry = null;
   }
 
-  void _onSuggestionTap(String template) {
-    // DIRECTLY execute command - don't just fill input!
-    final controller = Provider.of<AssistantController>(context, listen: false);
-    controller.processCommand(template);
-    _focusNode.unfocus();
+  void _onSuggestionTap(SuggestionItem suggestion) {
+    print('🎯 Suggestion tapped: ${suggestion.label} (needsInput: ${suggestion.needsInput})');
+    print('   Template: "${suggestion.template}"');
+    
+    if (suggestion.needsInput) {
+      // Fill input field and let user complete the command
+      print('   → Filling input field');
+      setState(() {
+        _commandController.text = suggestion.template;
+        _commandController.selection = TextSelection.fromPosition(
+          TextPosition(offset: suggestion.template.length),
+        );
+      });
+      
+      // Show example tooltip if available
+      if (suggestion.example != null) {
+        _showExampleTooltip(suggestion.example!);
+      }
+      
+      // Remove overlay after a short delay to show the filled text
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _removeOverlay();
+      });
+      _focusNode.requestFocus();
+    } else {
+      // DIRECTLY execute command
+      print('   → Executing directly');
+      final controller = Provider.of<AssistantController>(context, listen: false);
+      controller.processCommand(suggestion.template);
+      _focusNode.unfocus();
+    }
+  }
+
+  void _showExampleTooltip(String example) {
+    final overlay = Overlay.of(context);
+    OverlayEntry? tooltipEntry;
+    
+    // Animation controller needs to be created with vsync
+    // We'll use AnimatedContainer instead for simpler animation
+    
+    tooltipEntry = OverlayEntry(
+      builder: (context) {
+        // Get keyboard height
+        final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+        // Input area height (CommandInput + padding)
+        const inputAreaHeight = 80.0;
+        
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0.0, end: 1.0),
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOutCubic,
+          builder: (context, value, child) {
+            return Positioned(
+              left: 20,
+              right: 20,
+              bottom: keyboardHeight + inputAreaHeight + 10 - (50 * (1 - value)), // Slide up animation
+              child: Opacity(
+                opacity: value,
+                child: Material(
+                  color: Colors.transparent,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.lightbulb_outline,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            example,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+    
+    overlay.insert(tooltipEntry);
+    
+    // Remove after 2 seconds with slide down animation
+    Future.delayed(const Duration(milliseconds: 1700), () {
+      // Replace with slide down animation
+      final slideOutEntry = OverlayEntry(
+        builder: (context) {
+          final keyboardHeight = MediaQuery.of(context).viewInsets.bottom;
+          const inputAreaHeight = 80.0;
+          
+          return TweenAnimationBuilder<double>(
+            tween: Tween(begin: 1.0, end: 0.0),
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInCubic,
+            builder: (context, value, child) {
+              return Positioned(
+                left: 20,
+                right: 20,
+                bottom: keyboardHeight + inputAreaHeight + 10 - (50 * (1 - value)), // Slide down animation
+                child: Opacity(
+                  opacity: value,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.lightbulb_outline,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              example,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      );
+      
+      tooltipEntry?.remove();
+      overlay.insert(slideOutEntry);
+      
+      // Remove slide out entry after animation completes
+      Future.delayed(const Duration(milliseconds: 300), () {
+        slideOutEntry.remove();
+      });
+    });
   }
 
   void _handleSubmit(AssistantController controller) {
@@ -197,53 +377,77 @@ class _CommandScreenState extends State<CommandScreen> {
           builder: (context, controller, child) {
             // Suggestions are handled by Overlay, not in build tree!
             
-            return Column(
+            return Stack(
               children: [
-                // Status strip with menu
-                Row(
+                // Main content
+                Column(
                   children: [
+                    // Status strip with menu
+                    Row(
+                      children: [
+                        Expanded(
+                          child: StatusStrip(
+                            state: controller.state,
+                            isGuest: !authService.isAuthenticated,
+                          ),
+                        ),
+                        // Menu button
+                        IconButton(
+                          icon: const Icon(Icons.more_vert),
+                          onPressed: () => _showMenu(context, authService),
+                        ),
+                      ],
+                    ),
+                    
+                    // Main area with background
                     Expanded(
-                      child: StatusStrip(
-                        state: controller.state,
-                        isGuest: !authService.isAuthenticated,
+                      child: Stack(
+                        children: [
+                          // Background decoration
+                          Positioned.fill(
+                            child: _buildBackground(),
+                          ),
+                          
+                          // Main content
+                          Positioned.fill(
+                            child: _buildStateContent(controller),
+                          ),
+                        ],
                       ),
                     ),
-                    // Menu button
-                    IconButton(
-                      icon: const Icon(Icons.more_vert),
-                      onPressed: () => _showMenu(context, authService),
+                    
+                    // Command input (always at bottom)
+                    CommandInput(
+                      controller: _commandController,
+                      focusNode: _focusNode,
+                      isLoading: controller.isLoading,
+                      state: controller.state,
+                      onSubmit: () => _handleSubmit(controller),
+                      onVoiceInput: controller.startVoiceInput,
                     ),
+                    
+                    const SizedBox(height: 16),
                   ],
                 ),
                 
-                // Main area with background
-                Expanded(
-                  child: Stack(
-                    children: [
-                      // Background decoration
-                      Positioned.fill(
-                        child: _buildBackground(),
-                      ),
-                      
-                      // Main content
-                      Positioned.fill(
-                        child: _buildStateContent(controller),
-                      ),
-                    ],
+                // Sliding chart panel (highest z-index)
+                Positioned.fill(
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: SlidingChartPanel(
+                      isOpen: _isChartPanelOpen,
+                      onToggle: () {
+                        setState(() {
+                          _isChartPanelOpen = !_isChartPanelOpen;
+                        });
+                        // Refresh overlay to adjust suggestions panel
+                        if (_overlayEntry != null && _focusNode.hasFocus) {
+                          _showOverlay();
+                        }
+                      },
+                    ),
                   ),
                 ),
-                
-                // Command input (always at bottom)
-                CommandInput(
-                  controller: _commandController,
-                  focusNode: _focusNode,
-                  isLoading: controller.isLoading,
-                  state: controller.state,
-                  onSubmit: () => _handleSubmit(controller),
-                  onVoiceInput: controller.startVoiceInput,
-                ),
-                
-                const SizedBox(height: 16),
               ],
             );
           },
@@ -487,6 +691,20 @@ class _CommandScreenState extends State<CommandScreen> {
   }
 
   Widget _buildPanelContent(CommandAction action, AssistantController controller) {
+    // CRITICAL: Check if action has rawMessage but empty/invalid data
+    // This indicates backend sent wrong actionType - fallback to AI response
+    if (action.rawMessage != null && 
+        action.rawMessage!.isNotEmpty && 
+        action.data.isEmpty &&
+        action.type != ActionType.info &&
+        action.type != ActionType.unknown) {
+      print('⚠️ Detected misrouted action: ${action.type} with empty data but has rawMessage');
+      return AIResponsePanel(
+        action: action,
+        onDismiss: () => controller.dismissPanel(),
+      );
+    }
+    
     switch (action.type) {
       case ActionType.checkBalance:
       case ActionType.showPortfolio:
@@ -503,10 +721,19 @@ class _CommandScreenState extends State<CommandScreen> {
         );
       
       case ActionType.tokenRisk:
-        return TokenRiskPanel(
-          data: action.data,
-          onDismiss: () => controller.dismissPanel(),
-        );
+        // Check if we have structured risk data or just AI response
+        if (action.data.containsKey('riskScore') || action.data.containsKey('score')) {
+          return TokenRiskPanel(
+            data: action.data,
+            onDismiss: () => controller.dismissPanel(),
+          );
+        } else {
+          // Fallback to AI response panel for general analysis
+          return AIResponsePanel(
+            action: action,
+            onDismiss: () => controller.dismissPanel(),
+          );
+        }
       
       case ActionType.showTransactions:
         return TransactionHistoryPanel(
@@ -538,11 +765,11 @@ class _CommandScreenState extends State<CommandScreen> {
           },
         );
       
-      // Info responses - show compact summary only
+      // Info responses - show AI response panel
       case ActionType.info:
-        return _buildInfoPanel(
-          action.data['summary'] ?? 'Command processed',
-          controller,
+        return AIResponsePanel(
+          action: action,
+          onDismiss: () => controller.dismissPanel(),
         );
       
       // NFT Gallery - show placeholder for now
@@ -622,6 +849,14 @@ class _CommandScreenState extends State<CommandScreen> {
       case ActionType.importWallet:
       case ActionType.switchWallet:
       case ActionType.deleteWallet:
+        // Check if this is actually a wallet management action or misrouted
+        // If data is empty and we have rawMessage, show AI response instead
+        if (action.data.isEmpty && action.rawMessage != null && action.rawMessage!.isNotEmpty) {
+          return AIResponsePanel(
+            action: action,
+            onDismiss: () => controller.dismissPanel(),
+          );
+        }
         return WalletManagementPanel(
           data: action.data,
           initialTab: action.type == ActionType.manageEvmWallets ? 1 : 0,
@@ -888,10 +1123,14 @@ class _CommandScreenState extends State<CommandScreen> {
                   color: AppTheme.primary.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.terminal,
-                  color: AppTheme.primary,
-                  size: 28,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.asset(
+                    'assets/images/logo_ordo.png',
+                    width: 28,
+                    height: 28,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
               const SizedBox(width: 16),
@@ -1053,22 +1292,24 @@ class _CommandScreenState extends State<CommandScreen> {
           children: [
             const SizedBox(height: 100), // Top spacing
             
-            // App identity
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppTheme.primary.withOpacity(0.2),
-                  width: 1,
-                ),
-              ),
-              child: const Icon(
-                Icons.terminal,
-                size: 48,
-                color: AppTheme.primary,
-              ),
+            // App identity with Ordo logo
+            Image.asset(
+              'assets/images/logo_ordo.png',
+              width: 120,
+              height: 120,
+              fit: BoxFit.contain,
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  width: 120,
+                  height: 120,
+                  color: AppTheme.primary.withValues(alpha: 0.2),
+                  child: const Icon(
+                    Icons.image_not_supported,
+                    color: AppTheme.primary,
+                    size: 60,
+                  ),
+                );
+              },
             ),
             
             const SizedBox(height: 16),

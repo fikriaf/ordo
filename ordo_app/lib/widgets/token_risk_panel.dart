@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../services/token_logo_service.dart';
 
 class TokenRiskPanel extends StatelessWidget {
   final Map<String, dynamic> data;

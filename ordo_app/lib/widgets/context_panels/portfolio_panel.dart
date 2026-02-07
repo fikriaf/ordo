@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
+import '../../services/token_logo_service.dart';
 
 class TokenHolding {
   final String symbol;
@@ -211,26 +212,11 @@ class PortfolioPanel extends StatelessWidget {
         child: Row(
           children: [
             // Token logo
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppTheme.primary.withOpacity(0.1),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: AppTheme.primary.withOpacity(0.2),
-                  width: 1,
-                ),
-              ),
-              child: Center(
-                child: Text(
-                  holding.symbol[0],
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-              ),
+            TokenLogoService.buildTokenLogo(
+              symbol: holding.symbol,
+              size: 40,
+              fallbackColor: AppTheme.primary,
+              borderColor: AppTheme.primary.withOpacity(0.2),
             ),
             
             const SizedBox(width: 12),

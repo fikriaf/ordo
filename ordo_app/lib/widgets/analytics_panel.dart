@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/token_logo_service.dart';
 
 class AnalyticsPanel extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -708,23 +709,10 @@ class _AnalyticsPanelState extends State<AnalyticsPanel> with SingleTickerProvid
       ),
       child: Row(
         children: [
-          Container(
-            width: 32,
-            height: 32,
-            decoration: BoxDecoration(
-              color: Colors.teal.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Center(
-              child: Text(
-                symbol.isNotEmpty ? symbol[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  color: Colors.teal,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
-              ),
-            ),
+          TokenLogoService.buildTokenLogo(
+            symbol: symbol,
+            size: 32,
+            fallbackColor: Colors.teal,
           ),
           const SizedBox(width: 12),
           Expanded(

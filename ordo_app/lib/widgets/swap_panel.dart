@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/token_logo_service.dart';
 
 class SwapPanel extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -359,6 +360,12 @@ class _SwapPanelState extends State<SwapPanel> {
                 ),
                 child: Row(
                   children: [
+                    TokenLogoService.buildTokenLogo(
+                      symbol: token,
+                      size: 20,
+                      fallbackColor: AppTheme.primary,
+                    ),
+                    const SizedBox(width: 8),
                     Text(
                       token,
                       style: const TextStyle(

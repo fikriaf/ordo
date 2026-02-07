@@ -20,8 +20,8 @@ class AppTheme {
       scaffoldBackgroundColor: background,
       primaryColor: primary,
       
-      // Text Theme with Inter font
-      textTheme: GoogleFonts.interTextTheme(
+      // Text Theme with Tomorrow font
+      textTheme: GoogleFonts.tomorrowTextTheme(
         ThemeData.dark().textTheme.copyWith(
           // Command Input
           headlineMedium: const TextStyle(
@@ -63,7 +63,7 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: false,
         border: InputBorder.none,
-        hintStyle: GoogleFonts.inter(
+        hintStyle: GoogleFonts.tomorrow(
           fontSize: 20,
           fontWeight: FontWeight.w500,
           color: textSecondary,
@@ -73,12 +73,12 @@ class AppTheme {
       
       // Card Theme
       cardTheme: CardThemeData(
-        color: surface.withOpacity(0.6),
+        color: surface.withValues(alpha: 0.6),
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: Colors.white.withOpacity(0.05),
+            color: Colors.white.withValues(alpha: 0.05),
             width: 1,
           ),
         ),

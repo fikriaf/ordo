@@ -106,20 +106,24 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 60),
               
               // Logo/Title
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: AppTheme.primary.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: AppTheme.primary.withOpacity(0.2),
-                    width: 2,
-                  ),
-                ),
-                child: const Icon(
-                  Icons.terminal,
-                  size: 60,
-                  color: AppTheme.primary,
+              Center(
+                child: Image.asset(
+                  'assets/images/logo_ordo.png',
+                  width: 120,
+                  height: 120,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) {
+                    return Container(
+                      width: 120,
+                      height: 120,
+                      color: AppTheme.primary.withValues(alpha: 0.2),
+                      child: const Icon(
+                        Icons.image_not_supported,
+                        color: AppTheme.primary,
+                        size: 60,
+                      ),
+                    );
+                  },
                 ),
               ),
               
@@ -263,10 +267,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: AppTheme.error.withOpacity(0.1),
+                    color: AppTheme.error.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: AppTheme.error.withOpacity(0.3),
+                      color: AppTheme.error.withValues(alpha: 0.3),
                       width: 1,
                     ),
                   ),

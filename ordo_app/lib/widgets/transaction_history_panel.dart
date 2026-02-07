@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'package:intl/intl.dart';
+import '../services/token_logo_service.dart';
 
 class TransactionHistoryPanel extends StatelessWidget {
   final Map<String, dynamic> data;

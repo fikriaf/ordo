@@ -6,18 +6,22 @@ class SuggestionItem {
   final String label;
   final String template;
   final String tag;
+  final bool needsInput;
+  final String? example;
 
   const SuggestionItem({
     required this.icon,
     required this.label,
     required this.template,
     required this.tag,
+    this.needsInput = false,
+    this.example,
   });
 }
 
 class SuggestionsPanel extends StatelessWidget {
   final List<SuggestionItem> suggestions;
-  final Function(String) onSuggestionTap;
+  final Function(SuggestionItem) onSuggestionTap;
   final VoidCallback? onClose;
 
   const SuggestionsPanel({
@@ -132,7 +136,7 @@ class SuggestionsPanel extends StatelessWidget {
     bool isLast,
   ) {
     return InkWell(
-      onTap: () => onSuggestionTap(suggestion.template),
+      onTap: () => onSuggestionTap(suggestion),
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
@@ -268,8 +272,13 @@ class SuggestionsPanel extends StatelessWidget {
       case 'download':
       case 'deposit':
         return Icons.download;
+      case 'wallet':
+      case 'settings':
+      case 'security':
+      case 'about':
+        return Icons.settings;
       default:
-        return Icons.terminal;
+        return Icons.auto_awesome;
     }
   }
 }

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
+import '../services/token_logo_service.dart';
 
 class WalletManagementPanel extends StatefulWidget {
   final Map<String, dynamic> data;
@@ -576,6 +577,7 @@ class _WalletManagementPanelState extends State<WalletManagementPanel>
           isPrimary: wallet['isPrimary'] == true,
           chainSymbol: chainInfo['symbol'],
           chainIcon: chainInfo['icon'],
+          chainId: chainInfo['id'],
           chainName: chainInfo['name'],
           address: address,
           onCopy: () => _copyAddress(address),
@@ -668,9 +670,9 @@ class _WalletManagementPanelState extends State<WalletManagementPanel>
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  chain['icon'],
-                  style: const TextStyle(fontSize: 14),
+                TokenLogoService.buildChainLogo(
+                  chainId: chain['id'],
+                  size: 16,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -1199,6 +1201,7 @@ class _FlipWalletCard extends StatefulWidget {
   final bool isPrimary;
   final String chainSymbol;
   final String? chainIcon;
+  final String? chainId;
   final String? chainName;
   final String address;
   final VoidCallback onCopy;
@@ -1215,6 +1218,7 @@ class _FlipWalletCard extends StatefulWidget {
     required this.isPrimary,
     required this.chainSymbol,
     this.chainIcon,
+    this.chainId,
     this.chainName,
     required this.address,
     required this.onCopy,
@@ -1393,17 +1397,10 @@ class _FlipWalletCardState extends State<_FlipWalletCard>
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                if (widget.chainIcon != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.05),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      widget.chainIcon!,
-                      style: const TextStyle(fontSize: 12),
-                    ),
+                if (widget.chainId != null)
+                  TokenLogoService.buildChainLogo(
+                    chainId: widget.chainId!,
+                    size: 16,
                   ),
                 if (widget.isPrimary)
                   const Padding(
