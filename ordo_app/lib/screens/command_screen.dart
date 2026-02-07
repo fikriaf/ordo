@@ -691,20 +691,6 @@ class _CommandScreenState extends State<CommandScreen> {
   }
 
   Widget _buildPanelContent(CommandAction action, AssistantController controller) {
-    // CRITICAL: Check if action has rawMessage but empty/invalid data
-    // This indicates backend sent wrong actionType - fallback to AI response
-    if (action.rawMessage != null && 
-        action.rawMessage!.isNotEmpty && 
-        action.data.isEmpty &&
-        action.type != ActionType.info &&
-        action.type != ActionType.unknown) {
-      print('⚠️ Detected misrouted action: ${action.type} with empty data but has rawMessage');
-      return AIResponsePanel(
-        action: action,
-        onDismiss: () => controller.dismissPanel(),
-      );
-    }
-    
     switch (action.type) {
       case ActionType.checkBalance:
       case ActionType.showPortfolio:
@@ -729,6 +715,7 @@ class _CommandScreenState extends State<CommandScreen> {
           );
         } else {
           // Fallback to AI response panel for general analysis
+          print('⚠️ TokenRisk with empty data, showing AI response');
           return AIResponsePanel(
             action: action,
             onDismiss: () => controller.dismissPanel(),
