@@ -41,7 +41,7 @@ class AIResponsePanel extends StatelessWidget {
           _buildHeader(),
           
           // Content based on action type
-          _buildContent(),
+          _buildContent(context),
           
           // Footer with tools used
           if (action.toolsUsed != null && action.toolsUsed!.isNotEmpty)
@@ -393,7 +393,7 @@ class AIResponsePanel extends StatelessWidget {
     );
   }
 
-  Widget _buildContent() {
+  Widget _buildContent(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
