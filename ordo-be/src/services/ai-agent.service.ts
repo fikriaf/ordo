@@ -65,8 +65,26 @@ export class AIAgentService {
         // Get available tools from plugins and MCP servers (filtered by user message)
         const tools = await this.getAllAvailableTools(userMessage);
 
-        // Build messages array - SIMPLIFIED, no system prompt
+        // Build system prompt to instruct AI to use tools
+        const systemPrompt = `You are Ordo, a helpful Solana DeFi assistant. You have access to various tools to help users interact with the Solana blockchain.
+
+IMPORTANT INSTRUCTIONS:
+- ALWAYS use the available tools when the user asks for specific information or actions
+- For token risk analysis, ALWAYS call analyze_token_risk or get_token_risk tool
+- For balance checks, ALWAYS call get_balance or get_portfolio tool
+- For price queries, ALWAYS call get_token_price tool
+- For wallet operations, ALWAYS call the appropriate wallet tool
+- Do NOT provide information from your training data when a tool is available
+- After calling tools, provide a clear summary of the results
+
+Be concise, helpful, and always prioritize using tools over general knowledge.`;
+
+        // Build messages array with system prompt
         const messages: Message[] = [
+          {
+            role: 'system',
+            content: systemPrompt,
+          },
           ...conversationHistory,
           {
             role: 'user',
