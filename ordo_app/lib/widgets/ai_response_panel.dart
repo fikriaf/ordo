@@ -426,8 +426,27 @@ class AIResponsePanel extends StatelessWidget {
               ),
             ),
           
-          // Structured details
+          // Structured details OR raw message if no structured data
           _buildDetails(),
+          
+          // If no structured data but has rawMessage, show it with markdown
+          if (action.data.isEmpty && action.rawMessage != null && action.rawMessage!.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.05),
+                ),
+              ),
+              child: MarkdownBody(
+                data: action.rawMessage!,
+                selectable: true,
+                styleSheet: _buildMarkdownStyleSheet(context, action.status == 'error'),
+              ),
+            ),
         ],
       ),
     );
