@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../theme/app_theme.dart';
@@ -208,31 +209,39 @@ class _SlidingChartPanelState extends State<SlidingChartPanel>
               top: MediaQuery.of(context).size.height * 0.45,
               child: GestureDetector(
                 onTap: widget.onToggle,
-                child: Container(
-                  width: 32,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: AppTheme.primary,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(16),
-                      bottomLeft: Radius.circular(16),
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 10,
-                        offset: const Offset(-2, 0),
-                      ),
-                    ],
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    bottomLeft: Radius.circular(16),
                   ),
-                  child: Center(
-                    child: AnimatedRotation(
-                      turns: widget.isOpen ? 0.5 : 0.0,
-                      duration: const Duration(milliseconds: 300),
-                      child: const Icon(
-                        Icons.chevron_left,
-                        color: Colors.white,
-                        size: 24,
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      width: 32,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(16),
+                          bottomLeft: Radius.circular(16),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color.fromARGB(255, 67, 66, 66).withValues(alpha: 0.2),
+                            offset: const Offset(-2, 0),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: AnimatedRotation(
+                          turns: widget.isOpen ? 0.5 : 0.0,
+                          duration: const Duration(milliseconds: 300),
+                          child: const Icon(
+                            Icons.chevron_left,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -524,18 +533,37 @@ class _SlidingChartPanelState extends State<SlidingChartPanel>
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: _chartType == ChartType.line
-          ? _buildLineChart()
-          : _buildCandlestickChart(),
+      child: SizedBox(
+        height: 300, // Fixed height for both charts
+        child: _chartType == ChartType.line
+            ? _buildLineChart()
+            : _buildCandlestickChart(),
+      ),
     );
   }
 
   Widget _buildLineChart() {
-    return LineChart(
-      LineChartData(
-        gridData: const FlGridData(show: false),
-        titlesData: const FlTitlesData(show: false),
-        borderData: FlBorderData(show: false),
+    // Calculate min/max with padding (same as candlestick)
+    final minPrice = _chartData.map((c) => c.low).reduce((a, b) => a < b ? a : b);
+    final maxPrice = _chartData.map((c) => c.high).reduce((a, b) => a > b ? a : b);
+    final priceRange = maxPrice - minPrice;
+    final padding = priceRange * 0.1;
+    
+    return Stack(
+      children: [
+        // Grid background (same as candlestick)
+        CustomPaint(
+          painter: GridPainter(candleCount: _chartData.length),
+          child: Container(),
+        ),
+        // Line chart on top
+        LineChart(
+          LineChartData(
+            minY: minPrice - padding,
+            maxY: maxPrice + padding,
+            gridData: const FlGridData(show: false),
+            titlesData: const FlTitlesData(show: false),
+            borderData: FlBorderData(show: false),
         lineBarsData: [
           LineChartBarData(
             spots: _chartData.asMap().entries.map((entry) {
@@ -584,6 +612,8 @@ class _SlidingChartPanelState extends State<SlidingChartPanel>
           ),
         ),
       ),
+        ),
+      ],
     );
   }
 
@@ -875,6 +905,33 @@ class CandlestickChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (candles.isEmpty) return;
 
+    // Draw grid lines first (behind candles)
+    final gridPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.05)
+      ..strokeWidth = 1;
+
+    // Draw horizontal grid lines (5 lines)
+    for (int i = 0; i <= 5; i++) {
+      final y = (size.height / 5) * i;
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        gridPaint,
+      );
+    }
+
+    // Draw vertical grid lines (based on candle count, max 10 lines)
+    final verticalLines = (candles.length / 10).ceil().clamp(1, 10);
+    final verticalInterval = size.width / verticalLines;
+    for (int i = 0; i <= verticalLines; i++) {
+      final x = verticalInterval * i;
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        gridPaint,
+      );
+    }
+
     final priceRange = maxPrice - minPrice;
     final candleWidth = size.width / candles.length;
     final bodyWidth = candleWidth * 0.7;
@@ -961,5 +1018,47 @@ class CandlestickChartPainter extends CustomPainter {
   bool shouldRepaint(covariant CandlestickChartPainter oldDelegate) {
     return oldDelegate.selectedIndex != selectedIndex ||
            oldDelegate.candles != candles;
+  }
+}
+
+
+// Grid painter (shared by both line and candlestick charts)
+class GridPainter extends CustomPainter {
+  final int candleCount;
+
+  GridPainter({required this.candleCount});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gridPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.05)
+      ..strokeWidth = 1;
+
+    // Draw horizontal grid lines (5 lines)
+    for (int i = 0; i <= 5; i++) {
+      final y = (size.height / 5) * i;
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        gridPaint,
+      );
+    }
+
+    // Draw vertical grid lines (based on candle count, max 10 lines)
+    final verticalLines = (candleCount / 10).ceil().clamp(1, 10);
+    final verticalInterval = size.width / verticalLines;
+    for (int i = 0; i <= verticalLines; i++) {
+      final x = verticalInterval * i;
+      canvas.drawLine(
+        Offset(x, 0),
+        Offset(x, size.height),
+        gridPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant GridPainter oldDelegate) {
+    return oldDelegate.candleCount != candleCount;
   }
 }
